@@ -1,0 +1,9 @@
+#!/bin/bash
+npm i
+cd pdf.js
+npm i
+npx gulp lib
+cd ..
+
+mkdir -p build/cmaps
+cp -r pdf.js/external/bcmaps/*.bcmap build/cmaps/

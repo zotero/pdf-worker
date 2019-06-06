@@ -1,0 +1,21 @@
+{
+	"name": "pdf-worker",
+	"version": "1.0.0",
+	"description": "Read and write annotations to PDF file in browser and Node.js environments",
+	"main": "",
+	"scripts": {
+		"build": "./scripts/prepare && npm run build-worker",
+		"build-worker": "webpack --display-modules",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"author": "Martynas Bagdonas",
+	"license": "AGPL-3.0",
+	"dependencies": {
+		"pako": "^1.0.10",
+		"promise-queue": "^2.2.5"
+	},
+	"devDependencies": {
+		"webpack": "^4.33.0",
+		"webpack-cli": "^3.3.2"
+	}
+}

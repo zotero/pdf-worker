@@ -22,6 +22,8 @@
 	SOFTWARE.
  */
 
+// The original code is from https://github.com/DevelopingMagic/pdfassembler
+
 const pdf_manager_1 = require("./pdf.js/build/lib/core/pdf_manager");
 const primitives_1 = require("./pdf.js/build/lib/core/primitives");
 const stream_1 = require("./pdf.js/build/lib/core/stream");
@@ -38,7 +40,7 @@ class PDFAssembler {
         this.recoveryMode = false;
         this.objCache = Object.create(null);
         this.objCacheQueue = Object.create(null);
-        this.pdfManagerArrays = [];
+        this.pdfManagerArrays = new Map();
         this.pdfAssemblerArrays = [];
         this.promiseQueue = new queue(1);
         this.indent = false;
@@ -51,7 +53,7 @@ class PDFAssembler {
             this.userPassword = userPassword;
         }
         if (typeof inputData === 'object') {
-            if (inputData instanceof Blob || inputData instanceof ArrayBuffer || inputData instanceof Uint8Array) {
+            if ( (typeof Blob !=='undefined' && inputData instanceof Blob) || inputData instanceof ArrayBuffer || inputData instanceof Uint8Array) {
                 this.promiseQueue.add(() => this.toArrayBuffer(inputData)
                     .then(arrayBuffer => this.pdfManager = new pdf_manager_1.LocalPdfManager(1, arrayBuffer, userPassword, {}, ''))
                     .then(() => this.pdfManager.ensureDoc('checkHeader', []))
@@ -67,7 +69,7 @@ class PDFAssembler {
                     delete this.pdfTree['/Info']['/IsAcroFormPresent'];
                     delete this.pdfTree['/Info']['/IsXFAPresent'];
                     delete this.pdfTree['/Info']['/PDFFormatVersion'];
-                    this.pdfTree['/Info']['/Producer'] = '(PDF Assembler)';
+                    this.pdfTree['/Info']['/Producer'] = '(Zotero)';
                     this.pdfTree['/Info']['/ModDate'] = '(' + this.toPdfDate() + ')';
                     this.flattenPageTree();
                 }));
@@ -128,7 +130,7 @@ class PDFAssembler {
         return file instanceof ArrayBuffer ? Promise.resolve(file) :
             typedArrays.some(typedArray => file instanceof typedArray) ?
                 Promise.resolve(file.buffer) :
-                file instanceof Blob ?
+	              (typeof Blob !=='undefined' && file instanceof Blob) ?
                     new Promise((resolve, reject) => {
                         const fileReader = new FileReader();
                         fileReader.onload = () => resolve(fileReader.result);
@@ -173,14 +175,14 @@ class PDFAssembler {
             return `(${node})`;
         }
         else if (node instanceof Array) {
-            const existingArrayIndex = this.pdfManagerArrays.indexOf(node);
-            if (existingArrayIndex > -1) {
-                return this.pdfAssemblerArrays[existingArrayIndex];
+            const existingArrayIndex = this.pdfManagerArrays.get(node);
+            if (existingArrayIndex) {
+                return existingArrayIndex;
             }
             else {
                 const newArrayNode = [];
-                this.pdfManagerArrays.push(node);
-                this.pdfAssemblerArrays.push(newArrayNode);
+                this.pdfManagerArrays.set(node, newArrayNode);
+                // this.pdfAssemblerArrays.push(newArrayNode);
                 node.forEach((element, index) => newArrayNode.push(this.resolveNodeRefs(element, index, newArrayNode, contents)));
                 return newArrayNode;
             }
@@ -336,11 +338,11 @@ class PDFAssembler {
     resetObjectIds(node = this.pdfTree['/Root']) {
         if (node === this.pdfTree['/Root']) {
             this.nextNodeNum = 1;
-            this.objCache = [];
+            this.objCache = new Set();
         }
-        if (!this.objCache.includes(node)) {
-            this.objCache.push(node);
-            const toReset = (item) => typeof item === 'object' && item !== null && !this.objCache.includes(item);
+        if (!this.objCache.has(node)) {
+            this.objCache.add(node);
+            const toReset = (item) => typeof item === 'object' && item !== null && !this.objCache.has(item);
             if (node instanceof Array) {
                 node.filter(toReset).forEach(item => this.resetObjectIds(item));
             }
@@ -526,4 +528,4 @@ class PDFAssembler {
         return util_1.bytesToString(bytes);
     }
 }
-exports.PDFAssembler = PDFAssembler;
+module.exports = PDFAssembler;
