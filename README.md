@@ -1,4 +1,9 @@
-# Read and write annotations to PDF file in browser and Node.js environments
+# A PDF toolkit that runs on Node.js or Web Worker
+
+- [x] Import/export annotations
+- [ ] Extract general PDF file information
+- [ ] Extract full-text
+- [ ] Extract PDF file text structure that can be fed into recognizer-server
 
 ## Build
 Clone the repository:

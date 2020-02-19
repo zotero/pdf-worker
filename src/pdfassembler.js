@@ -22,16 +22,22 @@
 	SOFTWARE.
  */
 
-// The original code is from https://github.com/DevelopingMagic/pdfassembler
+// Slightly modified version of https://github.com/DevelopingMagic/pdfassembler
 
-const pdf_manager_1 = require("./pdf.js/build/lib/core/pdf_manager");
-const primitives_1 = require("./pdf.js/build/lib/core/primitives");
-const stream_1 = require("./pdf.js/build/lib/core/stream");
-const util_1 = require("./pdf.js/build/lib/shared/util");
-const pako_1 = require("pako");
-const queue = require("promise-queue");
+const {LocalPdfManager} = require('../pdf.js/build/lib/core/pdf_manager');
+const {Dict, Name, Ref} = require('../pdf.js/build/lib/core/primitives');
+const {
+  DecodeStream, Stream, FlateStream, PredictorStream, DecryptStream,
+  Ascii85Stream, RunLengthStream, LZWStream
+} = require('../pdf.js/build/lib/core/stream');
+const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
+const {arraysToBytes, bytesToString} = require('../pdf.js/build/lib/shared/util');
+const {deflate} = require('pako');
+
+const producer = 'Zotero';
+
 class PDFAssembler {
-    constructor(inputData, userPassword = '') {
+    constructor() {
         this.pdfManager = null;
         this.userPassword = '';
         this.ownerPassword = '';
@@ -42,37 +48,47 @@ class PDFAssembler {
         this.objCacheQueue = Object.create(null);
         this.pdfManagerArrays = new Map();
         this.pdfAssemblerArrays = [];
-        this.promiseQueue = new queue(1);
         this.indent = false;
         this.compress = true;
         this.encrypt = false;
         this.groupPages = true;
         this.pageGroupSize = 16;
         this.pdfVersion = '1.7';
+    }
+    
+    async init (inputData, userPassword = '') {
         if (userPassword.length) {
             this.userPassword = userPassword;
         }
         if (typeof inputData === 'object') {
             if ( (typeof Blob !=='undefined' && inputData instanceof Blob) || inputData instanceof ArrayBuffer || inputData instanceof Uint8Array) {
-                this.promiseQueue.add(() => this.toArrayBuffer(inputData)
-                    .then(arrayBuffer => this.pdfManager = new pdf_manager_1.LocalPdfManager(1, arrayBuffer, userPassword, {}, ''))
-                    .then(() => this.pdfManager.ensureDoc('checkHeader', []))
-                    .then(() => this.pdfManager.ensureDoc('parseStartXRef', []))
-                    .then(() => this.pdfManager.ensureDoc('parse', [this.recoveryMode]))
-                    .then(() => this.pdfManager.ensureDoc('numPages'))
-                    .then(() => this.pdfManager.ensureDoc('fingerprint'))
-                    .then(() => {
-                    this.pdfTree['/Root'] = this.resolveNodeRefs();
-                    const infoDict = new primitives_1.Dict();
-                    infoDict._map = this.pdfManager.pdfDocument.documentInfo;
-                    this.pdfTree['/Info'] = this.resolveNodeRefs(infoDict) || {};
-                    delete this.pdfTree['/Info']['/IsAcroFormPresent'];
-                    delete this.pdfTree['/Info']['/IsXFAPresent'];
-                    delete this.pdfTree['/Info']['/PDFFormatVersion'];
-                    this.pdfTree['/Info']['/Producer'] = '(Zotero)';
-                    this.pdfTree['/Info']['/ModDate'] = '(' + this.toPdfDate() + ')';
-                    this.flattenPageTree();
-                }));
+                let arrayBuffer = await this.toArrayBuffer(inputData);
+                this.pdfManager = new LocalPdfManager(1, arrayBuffer, userPassword, {}, '');
+                await this.pdfManager.ensureDoc('checkHeader', []);
+                await this.pdfManager.ensureDoc('parseStartXRef', []);
+                // Enter into recovery mode if the initial parse fails
+                try {
+                  await this.pdfManager.ensureDoc('parse', [this.recoveryMode]);
+                } catch (e) {
+                  if (!(e instanceof XRefParseException) && !this.recoveryMode) {
+                    throw e;
+                  }
+                  this.recoveryMode = true;
+                  await this.pdfManager.ensureDoc('parse', [this.recoveryMode]);
+                }
+                await this.pdfManager.ensureDoc('numPages');
+                await this.pdfManager.ensureDoc('fingerprint');
+    
+                this.pdfTree['/Root'] = this.resolveNodeRefs();
+                const infoDict = new Dict();
+                infoDict._map = this.pdfManager.pdfDocument.documentInfo;
+                this.pdfTree['/Info'] = this.resolveNodeRefs(infoDict) || {};
+                delete this.pdfTree['/Info']['/IsAcroFormPresent'];
+                delete this.pdfTree['/Info']['/IsXFAPresent'];
+                delete this.pdfTree['/Info']['/PDFFormatVersion'];
+                this.pdfTree['/Info']['/Producer'] = '(' + producer + ')';
+                this.pdfTree['/Info']['/ModDate'] = '(' + this.toPdfDate() + ')';
+                this.flattenPageTree();
             }
             else {
                 this.pdfTree = inputData;
@@ -102,34 +118,25 @@ class PDFAssembler {
             };
         }
     }
-    get pdfDocument() {
-        return this.promiseQueue.add(() => Promise.resolve(this.pdfManager && this.pdfManager.pdfDocument));
-    }
-    get numPages() {
-        this.promiseQueue.add(() => this.flattenPageTree());
-        return this.promiseQueue.add(() => Promise.resolve(this.pdfTree['/Root']['/Pages']['/Count']));
-    }
-    get pdfObject() {
-        return this.promiseQueue.add(() => Promise.resolve(this.pdfTree));
-    }
+    
     getPDFDocument() {
-        return this.promiseQueue.add(() => Promise.resolve(this.pdfManager && this.pdfManager.pdfDocument));
+        return this.pdfManager && this.pdfManager.pdfDocument;
     }
     countPages() {
-        this.promiseQueue.add(() => this.flattenPageTree());
-        return this.promiseQueue.add(() => Promise.resolve(this.pdfTree['/Root']['/Pages']['/Count']));
+        this.flattenPageTree();
+        return this.pdfTree['/Root']['/Pages']['/Count'];
     }
     getPDFStructure() {
-        return this.promiseQueue.add(() => Promise.resolve(this.pdfTree));
+        return this.pdfTree;
     }
-    toArrayBuffer(file) {
+    async toArrayBuffer(file) {
         const typedArrays = [
             Int8Array, Uint8Array, Int16Array, Uint16Array, Int32Array,
             Uint32Array, Uint8ClampedArray, Float32Array, Float64Array
         ];
-        return file instanceof ArrayBuffer ? Promise.resolve(file) :
+        return file instanceof ArrayBuffer ? file :
             typedArrays.some(typedArray => file instanceof typedArray) ?
-                Promise.resolve(file.buffer) :
+                file.buffer :
 	              (typeof Blob !=='undefined' && file instanceof Blob) ?
                     new Promise((resolve, reject) => {
                         const fileReader = new FileReader();
@@ -137,10 +144,10 @@ class PDFAssembler {
                         fileReader.onerror = () => reject(fileReader.error);
                         fileReader.readAsArrayBuffer(file);
                     }) :
-                    Promise.resolve(new ArrayBuffer(0));
+                    new ArrayBuffer(0);
     }
     resolveNodeRefs(node = this.pdfManager.pdfDocument.catalog.catDict, name, parent, contents = false) {
-        if (node instanceof primitives_1.Ref) {
+        if (node instanceof Ref) {
             const refKey = `${node.num}-${node.gen}`;
             if (this.objCache[refKey] === undefined) {
                 this.objCache[refKey] = null;
@@ -168,7 +175,7 @@ class PDFAssembler {
             }
             return this.objCache[refKey];
         }
-        else if (node instanceof primitives_1.Name) {
+        else if (node instanceof Name) {
             return '/' + node.name;
         }
         else if (typeof node === 'string') {
@@ -190,13 +197,13 @@ class PDFAssembler {
         else if (typeof node === 'object' && node !== null) {
             const objectNode = Object.create(null);
             let source = null;
-            const nodeMap = node.dict instanceof primitives_1.Dict ? node.dict._map : node instanceof primitives_1.Dict ? node._map : null;
+            const nodeMap = node.dict instanceof Dict ? node.dict._map : node instanceof Dict ? node._map : null;
             if (nodeMap) {
                 Object.keys(nodeMap).forEach((key) => objectNode[`/${key}`] =
                     this.resolveNodeRefs(nodeMap[key], `/${key}`, objectNode, !!nodeMap.Contents));
             }
-            if (node instanceof stream_1.DecodeStream || node instanceof stream_1.Stream) {
-                const streamsToDecode = [stream_1.FlateStream, stream_1.PredictorStream, stream_1.DecryptStream, stream_1.Ascii85Stream, stream_1.RunLengthStream, stream_1.LZWStream];
+            if (node instanceof DecodeStream || node instanceof Stream) {
+                const streamsToDecode = [FlateStream, PredictorStream, DecryptStream, Ascii85Stream, RunLengthStream, LZWStream];
                 if (objectNode['/Subtype'] !== '/Image' &&
                     streamsToDecode.some(streamToDecode => node instanceof streamToDecode)) {
                     objectNode.stream = node.getBytes();
@@ -212,7 +219,7 @@ class PDFAssembler {
                         node, node.stream, node.stream && node.stream.str,
                         node.str, node.str && node.str.str
                     ]) {
-                        if (checkSource instanceof stream_1.Stream || checkSource instanceof stream_1.DecryptStream) {
+                        if (checkSource instanceof Stream || checkSource instanceof DecryptStream) {
                             source = checkSource;
                             break;
                         }
@@ -226,7 +233,7 @@ class PDFAssembler {
             if (objectNode.stream) {
                 if (contents || objectNode['/Subtype'] === '/XML' ||
                     (objectNode.stream && objectNode.stream.every(byte => byte < 128))) {
-                    objectNode.stream = util_1.bytesToString(objectNode.stream);
+                    objectNode.stream = bytesToString(objectNode.stream);
                 }
                 delete objectNode['/Length'];
             }
@@ -361,171 +368,171 @@ class PDFAssembler {
         }
     }
     assemblePdf(nameOrOutputFormat = 'output.pdf') {
-        return this.promiseQueue.add(() => new Promise((resolve, reject) => {
-            const stringByteMap = [
-                '\\000', '\\001', '\\002', '\\003', '\\004', '\\005', '\\006', '\\007',
-                '\\b', '\\t', '\\n', '\\013', '\\f', '\\r', '\\016', '\\017',
-                '\\020', '\\021', '\\022', '\\023', '\\024', '\\025', '\\026', '\\027',
-                '\\030', '\\031', '\\032', '\\033', '\\034', '\\035', '\\036', '\\037',
-                ' ', '!', '"', '#', '$', '%', '&', '\'', '\\(', '\\)', '*', '+', ',', '-', '.', '/',
-                '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?',
-                '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O',
-                'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\\\', ']', '^', '_',
-                '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o',
-                'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '~', '\\177',
-                '\\200', '\\201', '\\202', '\\203', '\\204', '\\205', '\\206', '\\207',
-                '\\210', '\\211', '\\212', '\\213', '\\214', '\\215', '\\216', '\\217',
-                '\\220', '\\221', '\\222', '\\223', '\\224', '\\225', '\\226', '\\227',
-                '\\230', '\\231', '\\232', '\\233', '\\234', '\\235', '\\236', '\\237',
-                '\\240', '¡', '¢', '£', '¤', '¥', '¦', '§', '¨', '©', 'ª', '«', '¬', '­', '®', '¯',
-                '°', '±', '²', '³', '´', 'µ', '¶', '·', '¸', '¹', 'º', '»', '¼', '½', '¾', '¿',
-                'À', 'Á', 'Â', 'Ã', 'Ä', 'Å', 'Æ', 'Ç', 'È', 'É', 'Ê', 'Ë', 'Ì', 'Í', 'Î', 'Ï',
-                'Ð', 'Ñ', 'Ò', 'Ó', 'Ô', 'Õ', 'Ö', '×', 'Ø', 'Ù', 'Ú', 'Û', 'Ü', 'Ý', 'Þ', 'ß',
-                'à', 'á', 'â', 'ã', 'ä', 'å', 'æ', 'ç', 'è', 'é', 'ê', 'ë', 'ì', 'í', 'î', 'ï',
-                'ð', 'ñ', 'ò', 'ó', 'ô', 'õ', 'ö', '÷', 'ø', 'ù', 'ú', 'û', 'ü', 'ý', 'þ', 'ÿ',
-            ];
-            const space = !this.indent ? '' :
-                typeof this.indent === 'number' ? ' '.repeat(this.indent) :
-                    typeof this.indent === 'string' ? this.indent :
-                        '\t';
-            const newline = !this.indent ? '' : '\n';
-            this.flattenPageTree();
-            this.groupPageTree();
-            this.resetObjectIds();
-            this.pdfTree['/Root']['/Version'] = `/${this.pdfVersion}`;
-            const indirectObjects = [];
-            const newPdfObject = (jsObject, depth = 0, nextIndent = true) => {
-                if (nextIndent === true) {
-                    nextIndent = newline + space.repeat(depth);
+        const stringByteMap = [
+            '\\000', '\\001', '\\002', '\\003', '\\004', '\\005', '\\006', '\\007',
+            '\\b', '\\t', '\\n', '\\013', '\\f', '\\r', '\\016', '\\017',
+            '\\020', '\\021', '\\022', '\\023', '\\024', '\\025', '\\026', '\\027',
+            '\\030', '\\031', '\\032', '\\033', '\\034', '\\035', '\\036', '\\037',
+            ' ', '!', '"', '#', '$', '%', '&', '\'', '\\(', '\\)', '*', '+', ',', '-', '.', '/',
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?',
+            '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O',
+            'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\\\', ']', '^', '_',
+            '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o',
+            'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '~', '\\177',
+            '\\200', '\\201', '\\202', '\\203', '\\204', '\\205', '\\206', '\\207',
+            '\\210', '\\211', '\\212', '\\213', '\\214', '\\215', '\\216', '\\217',
+            '\\220', '\\221', '\\222', '\\223', '\\224', '\\225', '\\226', '\\227',
+            '\\230', '\\231', '\\232', '\\233', '\\234', '\\235', '\\236', '\\237',
+            '\\240', '¡', '¢', '£', '¤', '¥', '¦', '§', '¨', '©', 'ª', '«', '¬', '­', '®', '¯',
+            '°', '±', '²', '³', '´', 'µ', '¶', '·', '¸', '¹', 'º', '»', '¼', '½', '¾', '¿',
+            'À', 'Á', 'Â', 'Ã', 'Ä', 'Å', 'Æ', 'Ç', 'È', 'É', 'Ê', 'Ë', 'Ì', 'Í', 'Î', 'Ï',
+            'Ð', 'Ñ', 'Ò', 'Ó', 'Ô', 'Õ', 'Ö', '×', 'Ø', 'Ù', 'Ú', 'Û', 'Ü', 'Ý', 'Þ', 'ß',
+            'à', 'á', 'â', 'ã', 'ä', 'å', 'æ', 'ç', 'è', 'é', 'ê', 'ë', 'ì', 'í', 'î', 'ï',
+            'ð', 'ñ', 'ò', 'ó', 'ô', 'õ', 'ö', '÷', 'ø', 'ù', 'ú', 'û', 'ü', 'ý', 'þ', 'ÿ',
+        ];
+        const space = !this.indent ? '' :
+            typeof this.indent === 'number' ? ' '.repeat(this.indent) :
+                typeof this.indent === 'string' ? this.indent :
+                    '\t';
+        const newline = !this.indent ? '' : '\n';
+        this.flattenPageTree();
+        this.groupPageTree();
+        this.resetObjectIds();
+        this.pdfTree['/Root']['/Version'] = `/${this.pdfVersion}`;
+        const indirectObjects = [];
+        const newPdfObject = (jsObject, depth = 0, nextIndent = true) => {
+            if (nextIndent === true) {
+                nextIndent = newline + space.repeat(depth);
+            }
+            let pdfObject = '';
+            if (typeof jsObject === 'string') {
+                const firstChar = jsObject[0], lastChar = jsObject[jsObject.length - 1];
+                if (firstChar === '/') {
+                    const encodeChar = (char) => '\0\t\n\f\r #%()/<>[]{}'.indexOf(char) === -1 ?
+                        char : `#${`0${char.charCodeAt(0).toString(16)}`.slice(-2)}`;
+                    pdfObject = `/${jsObject.slice(1).replace(/./g, encodeChar)}`;
                 }
-                let pdfObject = '';
-                if (typeof jsObject === 'string') {
-                    const firstChar = jsObject[0], lastChar = jsObject[jsObject.length - 1];
-                    if (firstChar === '/') {
-                        const encodeChar = (char) => '\0\t\n\f\r #%()/<>[]{}'.indexOf(char) === -1 ?
-                            char : `#${`0${char.charCodeAt(0).toString(16)}`.slice(-2)}`;
-                        pdfObject = `/${jsObject.slice(1).replace(/./g, encodeChar)}`;
+                else if (firstChar === '(' && lastChar === ')') {
+                    const byteArray = Array.from(arraysToBytes(jsObject.slice(1, -1)));
+                    const stringEncode = byteArray.map((byte) => stringByteMap[byte]).join('');
+                    if (stringEncode.length < byteArray.length * 2) {
+                        pdfObject = `(${stringEncode})`;
                     }
-                    else if (firstChar === '(' && lastChar === ')') {
-                        const byteArray = Array.from(util_1.arraysToBytes(jsObject.slice(1, -1)));
-                        const stringEncode = byteArray.map((byte) => stringByteMap[byte]).join('');
-                        if (stringEncode.length < byteArray.length * 2) {
-                            pdfObject = `(${stringEncode})`;
+                    else {
+                        const hexEncode = byteArray.map((byte) => `0${byte.toString(16)}`.slice(-2)).join('');
+                        pdfObject = `<${hexEncode}>`;
+                    }
+                }
+                else {
+                    pdfObject = jsObject;
+                }
+            }
+            else if (typeof jsObject !== 'object' || jsObject === null) {
+                pdfObject = jsObject === null || jsObject === undefined ? 'null' :
+                    jsObject === true ? 'true' :
+                        jsObject === false ? 'false' :
+                            jsObject + '';
+            }
+            else if (jsObject instanceof Array) {
+                const arrayItems = jsObject
+                    .map((item, index) => newPdfObject(item, depth + 1, !!space || !!index))
+                    .join('');
+                pdfObject = `[${arrayItems}${newline}${space.repeat(depth)}]`;
+            }
+            else if (typeof jsObject.num === 'number' && indirectObjects[jsObject.num] !== undefined) {
+                pdfObject = `${jsObject.num} ${jsObject.gen} R`;
+            }
+            else {
+                if (typeof jsObject.num === 'number') {
+                    indirectObjects[jsObject.num] = null;
+                    pdfObject = `${jsObject.num} ${jsObject.gen} obj${newline}`;
+                    depth = 0;
+                    if (typeof jsObject.stream !== 'undefined') {
+                        if (jsObject.stream.length) {
+                            if (this.compress && !jsObject['/Filter']) {
+                                const compressedStream = deflate(arraysToBytes([jsObject.stream]));
+                                if (compressedStream.length + 19 < jsObject.stream.length) {
+                                    jsObject.stream = compressedStream;
+                                    jsObject['/Filter'] = '/FlateDecode';
+                                }
+                            }
+                        }
+                        jsObject['/Length'] = jsObject.stream.length;
+                    }
+                }
+                const dictItems = Object.keys(jsObject)
+                    .filter((key) => key[0] === '/')
+                    .map(key => newPdfObject(key, depth + 1) +
+                    newPdfObject(jsObject[key], depth + 1, !!space ? ' ' : ''))
+                    .join('');
+                pdfObject += `<<${dictItems}${newline}${space.repeat(depth)}>>`;
+                if (typeof jsObject.num === 'number') {
+                    if (typeof jsObject.stream !== 'undefined') {
+                        if (jsObject.stream.length) {
+                            const streamPrefix = `${pdfObject}${newline}stream\n`;
+                            const streamSuffix = `${newline}endstream\nendobj\n`;
+                            pdfObject = arraysToBytes([streamPrefix, jsObject.stream, streamSuffix]);
                         }
                         else {
-                            const hexEncode = byteArray.map((byte) => `0${byte.toString(16)}`.slice(-2)).join('');
-                            pdfObject = `<${hexEncode}>`;
+                            pdfObject += `${newline}stream\nendstream\nendobj\n`;
                         }
                     }
                     else {
-                        pdfObject = jsObject;
+                        pdfObject += `${newline}endobj\n`;
                     }
-                }
-                else if (typeof jsObject !== 'object' || jsObject === null) {
-                    pdfObject = jsObject === null || jsObject === undefined ? 'null' :
-                        jsObject === true ? 'true' :
-                            jsObject === false ? 'false' :
-                                jsObject + '';
-                }
-                else if (jsObject instanceof Array) {
-                    const arrayItems = jsObject
-                        .map((item, index) => newPdfObject(item, depth + 1, !!space || !!index))
-                        .join('');
-                    pdfObject = `[${arrayItems}${newline}${space.repeat(depth)}]`;
-                }
-                else if (typeof jsObject.num === 'number' && indirectObjects[jsObject.num] !== undefined) {
+                    indirectObjects[jsObject.num] = pdfObject;
                     pdfObject = `${jsObject.num} ${jsObject.gen} R`;
                 }
-                else {
-                    if (typeof jsObject.num === 'number') {
-                        indirectObjects[jsObject.num] = null;
-                        pdfObject = `${jsObject.num} ${jsObject.gen} obj${newline}`;
-                        depth = 0;
-                        if (typeof jsObject.stream !== 'undefined') {
-                            if (jsObject.stream.length) {
-                                if (this.compress && !jsObject['/Filter']) {
-                                    const compressedStream = pako_1.deflate(util_1.arraysToBytes([jsObject.stream]));
-                                    if (compressedStream.length + 19 < jsObject.stream.length) {
-                                        jsObject.stream = compressedStream;
-                                        jsObject['/Filter'] = '/FlateDecode';
-                                    }
-                                }
-                            }
-                            jsObject['/Length'] = jsObject.stream.length;
-                        }
-                    }
-                    const dictItems = Object.keys(jsObject)
-                        .filter((key) => key[0] === '/')
-                        .map(key => newPdfObject(key, depth + 1) +
-                        newPdfObject(jsObject[key], depth + 1, !!space ? ' ' : ''))
-                        .join('');
-                    pdfObject += `<<${dictItems}${newline}${space.repeat(depth)}>>`;
-                    if (typeof jsObject.num === 'number') {
-                        if (typeof jsObject.stream !== 'undefined') {
-                            if (jsObject.stream.length) {
-                                const streamPrefix = `${pdfObject}${newline}stream\n`;
-                                const streamSuffix = `${newline}endstream\nendobj\n`;
-                                pdfObject = util_1.arraysToBytes([streamPrefix, jsObject.stream, streamSuffix]);
-                            }
-                            else {
-                                pdfObject += `${newline}stream\nendstream\nendobj\n`;
-                            }
-                        }
-                        else {
-                            pdfObject += `${newline}endobj\n`;
-                        }
-                        indirectObjects[jsObject.num] = pdfObject;
-                        pdfObject = `${jsObject.num} ${jsObject.gen} R`;
-                    }
-                }
-                const prefix = nextIndent ? nextIndent :
-                    nextIndent === false || ['/', '[', '(', '<'].includes(pdfObject[0]) ? '' : ' ';
-                return prefix + pdfObject;
-            };
-            const rootRef = newPdfObject(this.pdfTree['/Root'], 0, false);
-            const infoRef = this.pdfTree['/Info'] && Object.keys(this.pdfTree['/Info']).length ?
-                newPdfObject(this.pdfTree['/Info'], 0, false) : null;
-            const header = `%PDF-${this.pdfVersion}\n` +
-                `%âãÏÓ\n`;
-            let offset = 0;
-            const xref = `xref\n` +
-                `0 ${indirectObjects.length}\n` +
-                `0000000000 65535 f \n` +
-                [header, ...indirectObjects]
-                    .filter(o => o)
-                    .map(o => (`0000000000${offset += o.length} 00000 n \n`).slice(-20))
-                    .slice(0, -1)
-                    .join('');
-            const trailer = `trailer\n` +
-                `<<${newline}` +
-                `${space}/Root ${rootRef}${newline}` +
-                (infoRef ? `${space}/Info ${infoRef}${newline}` : '') +
-                `${space}/Size ${indirectObjects.length}${newline}` +
-                `>>\n` +
-                `startxref\n` +
-                `${offset}\n` +
-                `%%EOF\n`;
-            const pdfData = util_1.arraysToBytes([header, ...indirectObjects.filter(o => o), xref, trailer]);
-            switch (nameOrOutputFormat) {
-                case 'ArrayBuffer':
-                    resolve(pdfData.buffer);
-                    break;
-                case 'Uint8Array':
-                    resolve(pdfData);
-                    break;
-                default:
-                    if (nameOrOutputFormat.slice(-4) !== '.pdf') {
-                        nameOrOutputFormat += '.pdf';
-                    }
-                    resolve(pdfData);
             }
-        }));
+            const prefix = nextIndent ? nextIndent :
+                nextIndent === false || ['/', '[', '(', '<'].includes(pdfObject[0]) ? '' : ' ';
+            return prefix + pdfObject;
+        };
+        const rootRef = newPdfObject(this.pdfTree['/Root'], 0, false);
+        const infoRef = this.pdfTree['/Info'] && Object.keys(this.pdfTree['/Info']).length ?
+            newPdfObject(this.pdfTree['/Info'], 0, false) : null;
+        const header = `%PDF-${this.pdfVersion}\n` +
+            `%âãÏÓ\n`;
+        let offset = 0;
+        const xref = `xref\n` +
+            `0 ${indirectObjects.length}\n` +
+            `0000000000 65535 f \n` +
+            [header, ...indirectObjects]
+                .filter(o => o)
+                .map(o => (`0000000000${offset += o.length} 00000 n \n`).slice(-20))
+                .slice(0, -1)
+                .join('');
+        const trailer = `trailer\n` +
+            `<<${newline}` +
+            `${space}/Root ${rootRef}${newline}` +
+            (infoRef ? `${space}/Info ${infoRef}${newline}` : '') +
+            `${space}/Size ${indirectObjects.length}${newline}` +
+            `>>\n` +
+            `startxref\n` +
+            `${offset}\n` +
+            `%%EOF\n`;
+        const pdfData = arraysToBytes([header, ...indirectObjects.filter(o => o), xref, trailer]);
+        switch (nameOrOutputFormat) {
+            case 'ArrayBuffer':
+                return pdfData.buffer;
+                break;
+            case 'Uint8Array':
+                return pdfData;
+                break;
+            default:
+                if (nameOrOutputFormat.slice(-4) !== '.pdf') {
+                    nameOrOutputFormat += '.pdf';
+                }
+                return pdfData;
+        }
+    
     }
     arraysToBytes(arrays) {
-        return util_1.arraysToBytes(arrays);
+        return arraysToBytes(arrays);
     }
     bytesToString(bytes) {
-        return util_1.bytesToString(bytes);
+        return bytesToString(bytes);
     }
 }
+
 module.exports = PDFAssembler;

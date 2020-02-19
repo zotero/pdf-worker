@@ -1,121 +1,101 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<title>Web worker example</title>
+  <meta charset="UTF-8">
+  <title>Web Worker example</title>
 </head>
 <body>
 <input type="file" onchange="handleFile()">
 <script>
-
-	let annotations = [
-		{
-			id: "okular-{7da99370-3c90-442a-b584-4c07a3dd5127}",
-			comment: "A note with some rich text? ",
-			position: {
-				pageNumber: 1,
-				rects: [[41.8000000000001, 615, 61.8, 635]],
-			},
-			label: "John Smith",
-			type: "text",
-			dateModified: '2019-04-19T08:21:13.011Z'
-		},
-		{
-			id: "8699016933447993",
-			comment: "An interesting idea",
-			position: {
-				pageNumber: 1,
-				rects: [
-					[223.56, 389.85, 427.94, 398.71],
-					[99.2, 379.05, 428.05, 387.91]
-				],
-			},
-			label: "John Smith",
-			type: "highlight",
-			dateModified: '2019-04-19T08:21:13.011Z'
-		},
-		{
-			id: "okular-{7da99370-3c90-442a-b584-4c07a3dd5122}",
-			comment: "A square",
-			position: {
-				pageNumber: 1,
-				rects: [[141.8000000000001, 615, 181.8, 655]],
-			},
-			label: "John Smith",
-			type: "square",
-			dateModified: '2019-04-19T08:21:13.011Z'
-		}
-	];
-
-	let promiseId = 0;
-	let waitingPromises = {};
-
-	let worker = new Worker('../../build/pdf-worker.js');
-
-	async function query(op, data, transfer) {
-		return new Promise(function (resolve) {
-			promiseId++;
-			waitingPromises[promiseId] = resolve;
-			worker.postMessage({id: promiseId, op, data}, transfer);
-		});
-	}
-
-	worker.onmessage = async function (e) {
-		let message = e.data;
-		console.log('Message received', message);
-		if (message.responseId) {
-			let resolve = waitingPromises[message.responseId];
-			if (resolve) {
-				resolve(message.data);
-			}
-			return;
-		}
-
-		if (message.id) {
-			let respData = null;
-			if (message.op === 'FetchBuiltInCMap') {
-				respData = {
-					compressionType: 1,
-					cMapData: new Uint8Array(await (await fetch('../../build/cmaps/' + message.data.name + '.bcmap')).arrayBuffer())
-				};
-			}
-			worker.postMessage({responseId: e.data.id, data: respData});
-			return;
-		}
-	};
-
-	function handleFile() {
-		let file = document.querySelector('input[type=file]').files[0];
-		let arrayBuffer;
-		let fileReader = new FileReader();
-		fileReader.onload = async function (event) {
-			arrayBuffer = event.target.result;
-			let extractedAnnotations = await query('read', {buf: arrayBuffer});
-			console.log('Extracted annotations', extractedAnnotations);
-			let data = await query('write', {buf: arrayBuffer, annotations}, [arrayBuffer]);
-			downloadFile(data.buf, 'test.pdf', 'application/pdf')
-		};
-		fileReader.readAsArrayBuffer(file);
-	}
-
-	function downloadFile(data, filename, mime) {
-		const blob = new Blob([data], {type: mime || 'application/octet-stream'});
-		const blobURL = window.URL.createObjectURL(blob);
-		const tempLink = document.createElement('a');
-		tempLink.style.display = 'none';
-		tempLink.href = blobURL;
-		tempLink.setAttribute('download', filename);
-		if (typeof tempLink.download === 'undefined') {
-			tempLink.setAttribute('target', '_blank');
-		}
-		document.body.appendChild(tempLink);
-		tempLink.click();
-		document.body.removeChild(tempLink);
-		setTimeout(() => {
-			window.URL.revokeObjectURL(blobURL);
-		}, 100);
-	}
-
+  let annotations = [
+    {
+      type: 'note',
+      id: 'zotero:12345/5FG7Q3V1',
+      position: {
+        pageIndex: 0,
+        rects: [[100, 100, 120, 120]]
+      },
+      comment: 'A test note',
+      authorName: 'John',
+      dateModified: '2019-04-19T08:21:13.011Z'
+    }
+  ];
+  
+  let promiseId = 0;
+  let waitingPromises = {};
+  
+  let worker = new Worker('../../build/pdf-worker.js');
+  
+  async function query(op, data, transfer) {
+    return new Promise(function (resolve) {
+      promiseId++;
+      waitingPromises[promiseId] = resolve;
+      worker.postMessage({ id: promiseId, op, data }, transfer);
+    });
+  }
+  
+  worker.onmessage = async function (e) {
+    let message = e.data;
+    console.log('Message received', message);
+    if (message.responseId) {
+      let resolve = waitingPromises[message.responseId];
+      if (resolve) {
+        resolve(message.data);
+      }
+      return;
+    }
+    
+    if (message.id) {
+      let respData = null;
+      if (message.op === 'FetchBuiltInCMap') {
+        respData = {
+          compressionType: 1,
+          cMapData: new Uint8Array(await (await fetch('../../build/cmaps/' + message.data + '.bcmap')).arrayBuffer())
+        };
+      }
+      worker.postMessage({ responseId: e.data.id, data: respData });
+      return;
+    }
+  }
+  
+  function handleFile() {
+    let file = document.querySelector('input[type=file]').files[0];
+    let arrayBuffer;
+    let fileReader = new FileReader();
+    fileReader.onload = async function (event) {
+      arrayBuffer = event.target.result;
+      let buf = arrayBuffer.slice();
+      let extractedAnnotations = await query('read', { buf }, [buf]);
+      console.log('Extracted annotations', extractedAnnotations);
+      
+      buf = arrayBuffer.slice();
+      let fulltext = await query('fulltext', { buf }, [buf]);
+      console.log('Extracted fulltext', fulltext);
+      
+      buf = arrayBuffer.slice();
+      let data = await query('write', { buf, annotations }, [buf]);
+      downloadFile(data.buf, 'test.pdf', 'application/pdf')
+    };
+    fileReader.readAsArrayBuffer(file);
+  }
+  
+  function downloadFile(data, filename, mime) {
+    const blob = new Blob([data], { type: mime || 'application/octet-stream' });
+    const blobURL = window.URL.createObjectURL(blob);
+    const tempLink = document.createElement('a');
+    tempLink.style.display = 'none';
+    tempLink.href = blobURL;
+    tempLink.setAttribute('download', filename);
+    if (typeof tempLink.download === 'undefined') {
+      tempLink.setAttribute('target', '_blank');
+    }
+    document.body.appendChild(tempLink);
+    tempLink.click();
+    document.body.removeChild(tempLink);
+    setTimeout(() => {
+      window.URL.revokeObjectURL(blobURL);
+    }, 100);
+  }
 </script>
 </body>
 </html>
