@@ -199,19 +199,45 @@ if (typeof self !== 'undefined') {
     async function cmapProvider(name) {
       return query('FetchBuiltInCMap', name);
     }
-    
+  
     if (message.op === 'write') {
-      console.log('Writing annotations', message.data);
-      let buf = await writeAnnotations(message.data.buf, message.data.annotations, message.data.password);
-      self.postMessage({ responseId: message.id, data: { buf } }, [buf]);
+      let buf;
+      try {
+        buf = await writeAnnotations(message.data.buf, message.data.annotations, message.data.password);
+        self.postMessage({ responseId: message.id, data: { buf } }, [buf]);
+      }
+      catch (e) {
+        self.postMessage({
+          responseId: message.id,
+          error: { message: e.message, name: e.name }
+        }, []);
+      }
     }
     else if (message.op === 'read') {
-      let annotations = await readAnnotations(message.data.buf, message.data.password, cmapProvider);
-      self.postMessage({ responseId: message.id, data: { annotations } }, []);
+      let annotations;
+      try {
+        annotations = await readAnnotations(message.data.buf, message.data.password, cmapProvider);
+        self.postMessage({ responseId: message.id, data: { annotations } }, []);
+      }
+      catch (e) {
+        self.postMessage({
+          responseId: message.id,
+          error: { message: e.message, name: e.name }
+        }, []);
+      }
     }
     else if (message.op === 'fulltext') {
-      let res = await extractFulltext(message.data.buf, message.data.password, 0, cmapProvider);
-      self.postMessage({ responseId: message.id, data: res }, []);
+      let res;
+      try {
+        res = await extractFulltext(message.data.buf, message.data.password, 0, cmapProvider);
+        self.postMessage({ responseId: message.id, data: res }, []);
+      }
+      catch (e) {
+        self.postMessage({
+          responseId: message.id,
+          error: { message: e.message, name: e.name }
+        }, []);
+      }
     }
   };
 }
