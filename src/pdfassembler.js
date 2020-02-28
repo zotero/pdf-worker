@@ -61,7 +61,7 @@ class PDFAssembler {
             this.userPassword = userPassword;
         }
         if (typeof inputData === 'object') {
-            if ( (typeof Blob !=='undefined' && inputData instanceof Blob) || inputData instanceof ArrayBuffer || inputData instanceof Uint8Array) {
+            if (inputData instanceof ArrayBuffer || inputData instanceof Uint8Array) {
                 let arrayBuffer = await this.toArrayBuffer(inputData);
                 this.pdfManager = new LocalPdfManager(1, arrayBuffer, userPassword, {}, '');
                 await this.pdfManager.ensureDoc('checkHeader', []);
@@ -136,15 +136,7 @@ class PDFAssembler {
         ];
         return file instanceof ArrayBuffer ? file :
             typedArrays.some(typedArray => file instanceof typedArray) ?
-                file.buffer :
-	              (typeof Blob !=='undefined' && file instanceof Blob) ?
-                    new Promise((resolve, reject) => {
-                        const fileReader = new FileReader();
-                        fileReader.onload = () => resolve(fileReader.result);
-                        fileReader.onerror = () => reject(fileReader.error);
-                        fileReader.readAsArrayBuffer(file);
-                    }) :
-                    new ArrayBuffer(0);
+                file.buffer : new ArrayBuffer(0);
     }
     resolveNodeRefs(node = this.pdfManager.pdfDocument.catalog.catDict, name, parent, contents = false) {
         if (node instanceof Ref) {
