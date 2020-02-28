@@ -5,7 +5,9 @@ const putils = require('../putils');
 
 function pdfDateToIso(str) {
   let m = str.match(/([0-9]{4})([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)/);
-  if (!m) (new Date()).toISOString();
+  if (!m) {
+    return (new Date()).toISOString();
+  }
   let d = [];
   for (let i = 1; i <= 6; i++) {
     if (!m[i]) break;
