@@ -190,7 +190,10 @@ class PDFAssembler {
                 const newArrayNode = [];
                 this.pdfManagerArrays.set(node, newArrayNode);
                 // this.pdfAssemblerArrays.push(newArrayNode);
-                node.forEach((element, index) => newArrayNode.push(this.resolveNodeRefs(element, index, newArrayNode, contents)));
+                for (let i = 0; i < node.length; i++) {
+                    let element = node[i];
+                    newArrayNode.push(this.resolveNodeRefs(element, i, newArrayNode, contents));
+                }
                 return newArrayNode;
             }
         }
@@ -199,8 +202,9 @@ class PDFAssembler {
             let source = null;
             const nodeMap = node.dict instanceof Dict ? node.dict._map : node instanceof Dict ? node._map : null;
             if (nodeMap) {
-                Object.keys(nodeMap).forEach((key) => objectNode[`/${key}`] =
-                    this.resolveNodeRefs(nodeMap[key], `/${key}`, objectNode, !!nodeMap.Contents));
+                for (let key of Object.keys(nodeMap)) {
+                    objectNode[`/${key}`] = this.resolveNodeRefs(nodeMap[key], `/${key}`, objectNode, !!nodeMap.Contents);
+                }
             }
             if (node instanceof DecodeStream || node instanceof Stream) {
                 const streamsToDecode = [FlateStream, PredictorStream, DecryptStream, Ascii85Stream, RunLengthStream, LZWStream];
