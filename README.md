@@ -1,7 +1,7 @@
 # A PDF toolkit that runs on Node.js or Web Worker
 
 - [x] Import/export annotations
-- [ ] Extract general PDF file information
+- [x] Extract general PDF file information
 - [ ] Extract full-text
 - [ ] Extract PDF file text structure that can be fed into recognizer-server
 

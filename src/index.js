@@ -1,4 +1,5 @@
 const PDFAssembler = require('./pdfassembler');
+const { getInfo } = require('./pdfinfo');
 const { readRawAnnotations } = require('./annotations/read');
 const { writeRawAnnotations } = require('./annotations/write');
 const { deleteMatchedAnnotations } = require('./annotations/delete');
@@ -165,8 +166,8 @@ async function extractStructure() {
 
 }
 
-async function extractInfo() {
-
+async function extractInfo(buf, password) {
+  return getInfo(buf, password);
 }
 
 if (typeof self !== 'undefined') {
@@ -230,6 +231,19 @@ if (typeof self !== 'undefined') {
       let res;
       try {
         res = await extractFulltext(message.data.buf, message.data.password, 0, cmapProvider);
+        self.postMessage({ responseId: message.id, data: res }, []);
+      }
+      catch (e) {
+        self.postMessage({
+          responseId: message.id,
+          error: { message: e.message, name: e.name }
+        }, []);
+      }
+    }
+    else if (message.op === 'info') {
+      let res;
+      try {
+        res = await extractInfo(message.data.buf, message.data.password);
         self.postMessage({ responseId: message.id, data: res }, []);
       }
       catch (e) {

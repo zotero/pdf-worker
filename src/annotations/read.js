@@ -3,24 +3,6 @@ const { stringToPDFString } = require('../../pdf.js/build/lib/shared/util');
 const utils = require('../utils');
 const putils = require('../putils');
 
-function pdfDateToIso(str) {
-  let m = str.match(/([0-9]{4})([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)/);
-  if (!m) {
-    return (new Date()).toISOString();
-  }
-  let d = [];
-  for (let i = 1; i <= 6; i++) {
-    if (!m[i]) break;
-    d.push(parseInt(m[i]));
-  }
-  
-  if (d[1]) {
-    d[1] -= 1;
-  }
-  
-  return (new Date(Date.UTC(...d))).toISOString();
-}
-
 function arrayColorToHex(color) {
   if (!color || color.length !== 3) return '';
   
@@ -71,7 +53,7 @@ exports.readRawAnnotations = function (structure) {
         rects
       };
       
-      annotation.dateModified = pdfDateToIso(getStr(rawAnnot['/M']));
+      annotation.dateModified = utils.pdfDateToIso(getStr(rawAnnot['/M']));
       // annotation.authorName = stringToPDFString(getStr(rawAnnot['/T']));
       annotation.comment = stringToPDFString(getStr(rawAnnot['/Contents']));
       annotation.color = arrayColorToHex(putils.getColorArray(rawAnnot['/C']));

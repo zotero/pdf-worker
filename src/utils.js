@@ -11,3 +11,21 @@ exports.quadPointsToRects = function (quadPoints) {
   }
   return rects;
 }
+
+exports.pdfDateToIso = function (str) {
+  let m = str.match(/([0-9]{4})([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)/);
+  if (!m) {
+    return (new Date()).toISOString();
+  }
+  let d = [];
+  for (let i = 1; i <= 6; i++) {
+    if (!m[i]) break;
+    d.push(parseInt(m[i]));
+  }
+  
+  if (d[1]) {
+    d[1] -= 1;
+  }
+  
+  return (new Date(Date.UTC(...d))).toISOString();
+}
