@@ -210,7 +210,7 @@ if (typeof self !== 'undefined') {
       catch (e) {
         self.postMessage({
           responseId: message.id,
-          error: { message: e.message, name: e.name }
+          error: { message: e.message, name: e.name, stack: e.stack }
         }, []);
       }
     }
@@ -223,7 +223,7 @@ if (typeof self !== 'undefined') {
       catch (e) {
         self.postMessage({
           responseId: message.id,
-          error: { message: e.message, name: e.name }
+          error: { message: e.message, name: e.name, stack: e.stack }
         }, []);
       }
     }
@@ -236,7 +236,7 @@ if (typeof self !== 'undefined') {
       catch (e) {
         self.postMessage({
           responseId: message.id,
-          error: { message: e.message, name: e.name }
+          error: { message: e.message, name: e.name, stack: e.stack }
         }, []);
       }
     }
@@ -249,7 +249,7 @@ if (typeof self !== 'undefined') {
       catch (e) {
         self.postMessage({
           responseId: message.id,
-          error: { message: e.message, name: e.name }
+          error: { message: e.message, name: e.name, stack: e.stack }
         }, []);
       }
     }
