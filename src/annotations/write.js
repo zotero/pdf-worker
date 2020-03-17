@@ -108,7 +108,7 @@ function annotationToRaw(annotation) {
       '/Subtype': '/Highlight',
       '/QuadPoints': rectsToQuads(annotation.position.rects).map(x => x.toFixed(3)),
       '/M': '(' + dateToRaw(annotation.dateModified) + ')',
-      '/T': '(' + stringToRaw(annotation.label) + ')',
+      '/T': '(' + stringToRaw(annotation.authorName) + ')',
       '/Contents': '(' + stringToRaw(annotation.comment) + ')',
       '/NM': '(' + annotation.id + ')',
       '/C': colorToRaw(annotation.color) || [1, 1, 0],
@@ -159,7 +159,7 @@ function annotationToRaw(annotation) {
       '/C': colorToRaw(annotation.color) || [0.611765, 0.611765, 0.611765],
       '/CA': 0.3,
       '/M': '(' + dateToRaw(annotation.dateModified) + ')',
-      '/T': '(' + stringToRaw(annotation.label) + ')',
+      '/T': '(' + stringToRaw(annotation.authorName) + ')',
       '/Contents': '(' + stringToRaw(annotation.comment) + ')',
       '/NM': '(' + annotation.id + ')',
       '/AP': {

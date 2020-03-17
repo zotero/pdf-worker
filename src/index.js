@@ -107,10 +107,10 @@ async function readAnnotations(buf, password, cmapProvider) {
     }
     
     if (pageLabels && pageLabels[pageIndex]) {
-      annotation.page = pageLabels[pageIndex];
+      annotation.pageLabel = pageLabels[pageIndex];
     }
     else {
-      annotation.page = (pageIndex + 1).toString();
+      annotation.pageLabel = (pageIndex + 1).toString();
     }
     
     let offset = 0;
