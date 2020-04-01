@@ -5,6 +5,9 @@ const { writeRawAnnotations } = require('./annotations/write');
 const { deleteMatchedAnnotations } = require('./annotations/delete');
 const { extractRange } = require('./text/range');
 const { getClosestOffset } = require('./text/offset');
+const { getPageLabelPoints, getPageLabel } = require('./text/page');
+
+let chsCache = {};
 
 async function getText(page, cmapProvider) {
   let handler = {};
@@ -65,6 +68,51 @@ async function getText(page, cmapProvider) {
   return items;
 }
 
+async function getPageChs(pageIndex, pdfDocument, cmapProvider) {
+  if (chsCache[pageIndex]) return chsCache[pageIndex];
+  
+  let page = await pdfDocument.getPage(pageIndex);
+  let pageItems = await getText(page, cmapProvider);
+  
+  let chs = [];
+  for (let item of pageItems) {
+    for (let ch of item.chars) {
+      chs.push(ch);
+    }
+  }
+  
+  chsCache[pageIndex] = chs;
+  return chs;
+}
+
+async function extractPageLabelPoints(pdfDocument, cmapProvider) {
+  for (let i = 0; i < 5 && i + 3 < pdfDocument.numPages; i++) {
+    let pageHeight = (await pdfDocument.getPage(i + 1)).view[3];
+    let chs1 = await getPageChs(i, pdfDocument, cmapProvider);
+    let chs2 = await getPageChs(i + 1, pdfDocument, cmapProvider);
+    let chs3 = await getPageChs(i + 2, pdfDocument, cmapProvider);
+    let chs4 = await getPageChs(i + 3, pdfDocument, cmapProvider);
+    let res = await getPageLabelPoints(i, chs1, chs2, chs3, chs4, pageHeight);
+    if (res) {
+      return res;
+    }
+  }
+  return null;
+}
+
+async function extractPageLabel(pageIndex, points, pdfDocument, cmapProvider) {
+  let chsPrev, chsCur, chsNext;
+  if (pageIndex > 0) {
+    chsPrev = await getPageChs(pageIndex - 1, pdfDocument, cmapProvider);
+  }
+  chsCur = await getPageChs(pageIndex, pdfDocument, cmapProvider);
+  
+  if (pageIndex < pdfDocument.numPages - 1) {
+    chsNext = await getPageChs(pageIndex + 1, pdfDocument, cmapProvider);
+  }
+  return getPageLabel(pageIndex, chsPrev, chsCur, chsNext, points);
+}
+
 async function writeAnnotations(buf, annotations, password) {
   let pdf = new PDFAssembler();
   await pdf.init(buf, password);
@@ -77,10 +125,9 @@ async function writeAnnotations(buf, annotations, password) {
 async function readAnnotations(buf, password, cmapProvider) {
   let pdf = new PDFAssembler();
   await pdf.init(buf, password);
+  let pdfDocument = pdf.pdfManager.pdfDocument;
   let structure = await pdf.getPDFStructure();
-  let annotations = await readRawAnnotations(structure, pdf.pdfManager.pdfDocument);
-  
-  let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
+  let annotations = await readRawAnnotations(structure, pdfDocument);
   
   let pageChs;
   let pageHeight;
@@ -92,7 +139,7 @@ async function readAnnotations(buf, password, cmapProvider) {
     let pageIndex = annotation.position.pageIndex;
     
     if (loadedPageIndex !== pageIndex) {
-      let page = await pdf.pdfManager.pdfDocument.getPage(pageIndex);
+      let page = await pdfDocument.getPage(pageIndex);
       let pageItems = await getText(page, cmapProvider);
       loadedPageIndex = pageIndex;
       
@@ -106,11 +153,23 @@ async function readAnnotations(buf, password, cmapProvider) {
       pageHeight = page.view[3];
     }
     
-    if (pageLabels && pageLabels[pageIndex]) {
-      annotation.pageLabel = pageLabels[pageIndex];
+    let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
+    if (points) {
+      annotation.pageLabel = '-';
+      let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider);
+      if (pageLabel) {
+        annotation.pageLabel = pageLabel;
+      }
     }
     else {
-      annotation.pageLabel = (pageIndex + 1).toString();
+      let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
+      
+      if (pageLabels && pageLabels[pageIndex]) {
+        annotation.pageLabel = pageLabels[pageIndex];
+      }
+      else {
+        annotation.pageLabel = (pageIndex + 1).toString();
+      }
     }
     
     let offset = 0;
