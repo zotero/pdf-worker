@@ -1,4 +1,5 @@
 const { stringToPDFString } = require('../../pdf.js/build/lib/shared/util');
+const { getClosestColor } = require('../color');
 
 const utils = require('../utils');
 const putils = require('../putils');
@@ -56,7 +57,7 @@ exports.readRawAnnotations = function (structure) {
       annotation.dateModified = utils.pdfDateToIso(getStr(rawAnnot['/M']));
       // annotation.authorName = stringToPDFString(getStr(rawAnnot['/T']));
       annotation.comment = stringToPDFString(getStr(rawAnnot['/Contents']));
-      annotation.color = arrayColorToHex(putils.getColorArray(rawAnnot['/C']));
+      annotation.color = getClosestColor(arrayColorToHex(putils.getColorArray(rawAnnot['/C'])));
       
       annotations.push(annotation);
     }
