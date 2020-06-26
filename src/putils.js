@@ -1,4 +1,4 @@
-const { ColorSpace } = require('../../pdf.js/build/lib/core/colorspace');
+const { ColorSpace } = require('../pdf.js/build/lib/core/colorspace');
 
 // The code below is extracted from pdf.js source because there was
 // no way to incorporate it directly or some modifications were necessary
@@ -25,15 +25,15 @@ function intersect(rect1, rect2) {
   function compare(a, b) {
     return a - b;
   }
-  
+
   // Order points along the axes
   var orderedX = [rect1[0], rect1[2], rect2[0], rect2[2]].sort(compare),
     orderedY = [rect1[1], rect1[3], rect2[1], rect2[3]].sort(compare),
     result = [];
-  
+
   rect1 = Util_normalizeRect(rect1);
   rect2 = Util_normalizeRect(rect2);
-  
+
   // X: first and second points belong to different rectangles?
   if ((orderedX[0] === rect1[0] && orderedX[1] === rect2[0]) ||
     (orderedX[0] === rect2[0] && orderedX[1] === rect1[0])) {
@@ -44,7 +44,7 @@ function intersect(rect1, rect2) {
   else {
     return false;
   }
-  
+
   // Y: first and second points belong to different rectangles?
   if ((orderedY[0] === rect1[1] && orderedY[1] === rect2[1]) ||
     (orderedY[0] === rect2[1] && orderedY[1] === rect1[1])) {
@@ -55,7 +55,7 @@ function intersect(rect1, rect2) {
   else {
     return false;
   }
-  
+
   return result;
 }
 
@@ -79,22 +79,22 @@ function getColorArray(color) {
     case 0: // Transparent, which we indicate with a null value
       value = null;
       break;
-    
+
     case 1: // Convert grayscale to RGB
       ColorSpace.singletons.gray.getRgbItem(color, 0, rgbColor, 0);
       this.color = rgbColor;
       break;
-    
+
     case 3: // Convert RGB percentages to RGB
       ColorSpace.singletons.rgb.getRgbItem(color, 0, rgbColor, 0);
       value = rgbColor;
       break;
-    
+
     case 4: // Convert CMYK to RGB
       ColorSpace.singletons.cmyk.getRgbItem(color, 0, rgbColor, 0);
       value = rgbColor;
       break;
-    
+
     default:
       value = rgbColor;
       break;
