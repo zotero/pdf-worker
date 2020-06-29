@@ -4,8 +4,10 @@
   "description": "A PDF toolkit that runs on Node.js or Web Worker",
   "main": "",
   "scripts": {
-    "build": "./scripts/prepare && npm run build-worker",
-    "build-worker": "webpack --display-modules",
+    "build": "npm run build:pdf.js && npm run build:worker",
+    "build:pdf.js": "scripts/build-pdfjs",
+    "build:worker": "NODE_ENV=production webpack --display-modules",
+    "devel:worker": "webpack --display-modules",
     "test": "NODE_ENV=test ./node_modules/mocha/bin/mocha"
   },
   "author": "Martynas Bagdonas",

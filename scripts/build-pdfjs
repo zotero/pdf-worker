@@ -1,5 +1,4 @@
 #!/bin/bash
-npm i
 cd pdf.js
 npm i
 npx gulp lib

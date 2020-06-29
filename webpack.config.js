@@ -2,9 +2,9 @@ const path = require('path');
 const exec = require('child_process').exec;
 
 module.exports = {
-  watch: true,
+  watch: process.env.NODE_ENV !== 'production',
   devtool: 'source-map',
-  mode: 'development',
+  mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
   entry: ['./src/index.js'],
   output: {
     path: path.join(__dirname, './build'),
@@ -30,10 +30,12 @@ module.exports = {
     {
       apply: (compiler) => {
         compiler.hooks.afterEmit.tap('AfterEmitPlugin', (compilation) => {
-          exec('node examples/node/index.js', (err, stdout, stderr) => {
-            if (stdout) process.stdout.write(stdout);
-            if (stderr) process.stderr.write(stderr);
-          });
+          if (process.env.NODE_ENV !== 'production') {
+            exec('node examples/node/index.js', (err, stdout, stderr) => {
+              if (stdout) process.stdout.write(stdout);
+              if (stderr) process.stderr.write(stderr);
+            });
+          }
         });
       }
     }
