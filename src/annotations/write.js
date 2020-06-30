@@ -61,9 +61,9 @@ function annotationToRaw(annotation) {
     containerRect[2] = Math.max(containerRect[2], rect[2]);
     containerRect[3] = Math.max(containerRect[3], rect[3]);
   }
-  
+
   containerRect = containerRect.map(x => x.toFixed(3));
-  
+
   if (annotation.type === 'note') {
     return {
       '/Type': '/Annot',
@@ -72,7 +72,7 @@ function annotationToRaw(annotation) {
       '/M': '(' + dateToRaw(annotation.dateModified) + ')',
       '/T': '(' + stringToRaw(annotation.authorName) + ')',
       '/Contents': '(' + stringToRaw(annotation.comment) + ')',
-      '/NM': '(' + annotation.id + ')',
+      '/NM': '(' + 'Zotero-' + annotation.id + ')',
       '/F': 4,
       '/C': colorToRaw(annotation.color) || [1, 1, 0],
       '/CA': 1,
@@ -101,14 +101,14 @@ function annotationToRaw(annotation) {
       p += rect[2] + ' ' + rect[3] + ' l\r';
       p += rect[0] + ' ' + rect[3] + ' l\rh\r';
     }
-    
+
     return {
       '/Type': '/Annot',
       '/Rect': containerRect,
       '/Subtype': '/Highlight',
       '/QuadPoints': rectsToQuads(annotation.position.rects).map(x => x.toFixed(3)),
       '/M': '(' + dateToRaw(annotation.dateModified) + ')',
-      '/T': '(' + stringToRaw(annotation.authorName) + ')',
+      '/T': '(' + stringToRaw(annotation.authorName || '') + ')',
       '/Contents': '(' + stringToRaw(annotation.comment) + ')',
       '/NM': '(' + annotation.id + ')',
       '/C': colorToRaw(annotation.color) || [1, 1, 0],
@@ -147,7 +147,7 @@ function annotationToRaw(annotation) {
       containerRect[2] - containerRect[0],
       containerRect[3] - containerRect[1]
     ].join(' ');
-    
+
     return {
       '/Type': '/Annot',
       '/Subtype': '/Square',

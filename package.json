@@ -1,7 +1,7 @@
 {
   "name": "pdf-worker",
   "version": "1.0.0",
-  "description": "A PDF toolkit that runs on Node.js or Web Worker",
+  "description": "A PDF toolkit that runs on Node.js and Web Worker",
   "main": "",
   "scripts": {
     "build": "npm run build:pdf.js && npm run build:worker",
