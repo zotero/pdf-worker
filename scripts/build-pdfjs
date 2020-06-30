@@ -1,6 +1,6 @@
 #!/bin/bash
 cd pdf.js
-npm i
+npm ci
 npx gulp lib
 cd ..
 
