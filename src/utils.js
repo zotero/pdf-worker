@@ -22,10 +22,10 @@ exports.pdfDateToIso = function (str) {
     if (!m[i]) break;
     d.push(parseInt(m[i]));
   }
-  
+
   if (d[1]) {
     d[1] -= 1;
   }
-  
+
   return (new Date(Date.UTC(...d))).toISOString();
 }

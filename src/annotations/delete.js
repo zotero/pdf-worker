@@ -15,7 +15,7 @@ exports.deleteAnnotations = function (structure, ids) {
         }
       }
     }
-    
+
     if (!rawPage['/Annots'].length) {
       delete rawPage['/Annots'];
     }
@@ -39,7 +39,7 @@ exports.deleteMatchedAnnotations = function (structure, annotations) {
         }
       }
     }
-    
+
     if (!rawPage['/Annots'].length) {
       delete rawPage['/Annots'];
     }

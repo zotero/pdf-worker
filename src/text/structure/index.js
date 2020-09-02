@@ -34,14 +34,14 @@ function getLines(chs) {
       }
       continue
     }
-    
+
     if (!line.chs.length) {
       line.chs.push(ch);
     }
     else {
-      
+
       let newLine = false;
-      
+
       if (!ch.rotation) {
         if (prevCh.rect[0] > ch.rect[0]) {
           newLine = true;
@@ -62,7 +62,7 @@ function getLines(chs) {
           newLine = true;
         }
       }
-      
+
       if (
         newLine ||
         prevCh.rotation !== ch.rotation ||
@@ -76,9 +76,9 @@ function getLines(chs) {
       }
     }
   }
-  
+
   if (line.chs.length) lines.push(line);
-  
+
   for (let line of lines) {
     line.rect = line.chs[0].rect.slice();
     for (let ch of line.chs) {
@@ -88,10 +88,10 @@ function getLines(chs) {
       line.rect[3] = Math.max(line.rect[3], ch.rect[3]);
     }
   }
-  
+
   for (let line of lines) {
     line.words = [];
-    
+
     let rot;
     let rotation = line.chs[0].rotation;
     if (!rotation) {
@@ -106,9 +106,9 @@ function getLines(chs) {
     else if (rotation === 270) {
       rot = 3;
     }
-    
+
     let wordSp = xpdf.computeWordSpacingThreshold(line.chs, rot);
-    
+
     let i = 0;
     while (i < line.chs.length) {
       let sp = wordSp - 1;
@@ -123,17 +123,17 @@ function getLines(chs) {
           break;
         }
       }
-      
+
       let word = {
         chs: line.chs.slice(i, j),
         spaceAfter
       };
-      
+
       line.words.push(word);
       i = j;
     }
   }
-  
+
   return lines;
 }
 

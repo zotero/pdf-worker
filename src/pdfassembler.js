@@ -1,18 +1,18 @@
 /*
 	MIT License
-	
+
 	Copyright (c) 2018 David Schnell-Davis
-	
+
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
 	in the Software without restriction, including without limitation the rights
 	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 	copies of the Software, and to permit persons to whom the Software is
 	furnished to do so, subject to the following conditions:
-	
+
 	The above copyright notice and this permission notice shall be included in all
 	copies or substantial portions of the Software.
-	
+
 	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -55,8 +55,8 @@ class PDFAssembler {
         this.pageGroupSize = 16;
         this.pdfVersion = '1.7';
     }
-    
-    async init (inputData, userPassword = '') {
+
+  async init (inputData, userPassword = '') {
         if (userPassword.length) {
             this.userPassword = userPassword;
         }
@@ -78,8 +78,8 @@ class PDFAssembler {
                 }
                 await this.pdfManager.ensureDoc('numPages');
                 await this.pdfManager.ensureDoc('fingerprint');
-    
-                this.pdfTree['/Root'] = this.resolveNodeRefs();
+
+              this.pdfTree['/Root'] = this.resolveNodeRefs();
                 const infoDict = new Dict();
                 infoDict._map = this.pdfManager.pdfDocument.documentInfo;
                 this.pdfTree['/Info'] = this.resolveNodeRefs(infoDict) || {};
@@ -118,8 +118,8 @@ class PDFAssembler {
             };
         }
     }
-    
-    getPDFDocument() {
+
+  getPDFDocument() {
         return this.pdfManager && this.pdfManager.pdfDocument;
     }
     countPages() {
@@ -129,26 +129,28 @@ class PDFAssembler {
     getPDFStructure() {
         return this.pdfTree;
     }
-    async toArrayBuffer(file) {
-        const typedArrays = [
-            Int8Array, Uint8Array, Int16Array, Uint16Array, Int32Array,
-            Uint32Array, Uint8ClampedArray, Float32Array, Float64Array
-        ];
-        return file instanceof ArrayBuffer ? file :
-            typedArrays.some(typedArray => file instanceof typedArray) ?
-                file.buffer : new ArrayBuffer(0);
-    }
-    resolveNodeRefs(node = this.pdfManager.pdfDocument.catalog.catDict, name, parent, contents = false) {
-        if (node instanceof Ref) {
-            const refKey = `${node.num}-${node.gen}`;
-            if (this.objCache[refKey] === undefined) {
-                this.objCache[refKey] = null;
-                const refNode = this.pdfManager.pdfDocument.xref.fetch(node);
-                this.objCache[refKey] = this.resolveNodeRefs(refNode, name, parent, contents);
-                if (typeof this.objCache[refKey] === 'object' &&
-                    this.objCache[refKey] !== null &&
-                    !(this.objCache[refKey] instanceof Array)) {
-                    Object.assign(this.objCache[refKey], { num: 0, gen: 0 });
+
+  async toArrayBuffer(file) {
+    const typedArrays = [
+      Int8Array, Uint8Array, Int16Array, Uint16Array, Int32Array,
+      Uint32Array, Uint8ClampedArray, Float32Array, Float64Array
+    ];
+    return file instanceof ArrayBuffer ? file :
+      typedArrays.some(typedArray => file instanceof typedArray) ?
+        file.buffer : new ArrayBuffer(0);
+  }
+
+  resolveNodeRefs(node = this.pdfManager.pdfDocument.catalog._catDict, name, parent, contents = false) {
+    if (node instanceof Ref) {
+      const refKey = `${node.num}-${node.gen}`;
+      if (this.objCache[refKey] === undefined) {
+        this.objCache[refKey] = null;
+        const refNode = this.pdfManager.pdfDocument.xref.fetch(node);
+        this.objCache[refKey] = this.resolveNodeRefs(refNode, name, parent, contents);
+        if (typeof this.objCache[refKey] === 'object' &&
+          this.objCache[refKey] !== null &&
+          !(this.objCache[refKey] instanceof Array)) {
+          Object.assign(this.objCache[refKey], { num: 0, gen: 0 });
                 }
                 if (this.objCacheQueue[refKey] !== undefined) {
                     Object.keys(this.objCacheQueue[refKey]).forEach(fixName => this.objCacheQueue[refKey][fixName].forEach(fixParent => fixParent[fixName] = this.objCache[refKey]));
@@ -226,17 +228,20 @@ class PDFAssembler {
                     }
                 }
             }
-            if (objectNode.stream) {
-                if (contents || objectNode['/Subtype'] === '/XML' ||
-                    (objectNode.stream && objectNode.stream.every(byte => byte < 128))) {
-                    objectNode.stream = bytesToString(objectNode.stream);
-                }
-                delete objectNode['/Length'];
-            }
-            if (node === this.pdfManager.pdfDocument.catalog.catDict) {
-                const catKey = node.objId.slice(0, -1) + '-0';
-                this.objCache[catKey] = Object.assign(objectNode, { num: this.nextNodeNum++, gen: 0 });
-            }
+      if (objectNode.stream) {
+        if (contents || objectNode['/Subtype'] === '/XML' ||
+          (objectNode.stream && objectNode.stream.every(byte => byte < 128))) {
+          objectNode.stream = bytesToString(objectNode.stream);
+        }
+        delete objectNode['/Length'];
+      }
+      if (node === this.pdfManager.pdfDocument.catalog._catDict) {
+        const catKey = node.objId.slice(0, -1) + '-0';
+        this.objCache[catKey] = Object.assign(objectNode, {
+          num: this.nextNodeNum++,
+          gen: 0
+        });
+      }
             return objectNode;
         }
         else {
@@ -521,7 +526,7 @@ class PDFAssembler {
                 }
                 return pdfData;
         }
-    
+
     }
     arraysToBytes(arrays) {
         return arraysToBytes(arrays);

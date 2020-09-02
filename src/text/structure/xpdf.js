@@ -17,7 +17,7 @@ function computeWordSpacingThreshold(chs, rot) {
   let avgFontSize;
   let minAdjGap, maxAdjGap, minSpGap, maxSpGap, minGap, maxGap, gap, gap2;
   let i;
-  
+
   avgFontSize = 0;
   minGap = maxGap = 0;
   minAdjGap = minSpGap = 1;
@@ -62,7 +62,7 @@ function computeWordSpacingThreshold(chs, rot) {
   if (minGap < 0) {
     minGap = 0;
   }
-  
+
   // if spacing is nearly uniform (minGap is close to maxGap), use the
   // SpGap/AdjGap values if available, otherwise assume it's a single
   // word (technically it could be either "ABC" or "A B C", but it's
@@ -76,13 +76,13 @@ function computeWordSpacingThreshold(chs, rot) {
     else {
       return maxGap + 1;
     }
-    
+
     // if there is some variation in spacing, but it's small, assume
     // there are some inter-word spaces
   }
   else if (maxGap - minGap < wordSpacing * avgFontSize) {
     return 0.5 * (minGap + maxGap);
-    
+
     // if there is a large variation in spacing, use the SpGap/AdjGap
     // values if they look reasonable, otherwise, assume a reasonable
     // threshold for inter-word spacing (we can't use something like

@@ -21,11 +21,11 @@ async function getInfo(arrayBuffer, userPassword = '') {
   await pdfManager.ensureDoc('numPages');
   await pdfManager.ensureDoc('fingerprint');
   await pdfManager.ensureDoc('documentInfo');
-  
+
   console.log(pdfManager.pdfDocument.documentInfo);
-  
+
   let documentInfo = pdfManager.pdfDocument.documentInfo;
-  
+
   let data = {
     ...documentInfo,
     ModDate: utils.pdfDateToIso(documentInfo.ModDate),
@@ -33,7 +33,7 @@ async function getInfo(arrayBuffer, userPassword = '') {
     NumPages: pdfManager.pdfDocument.numPages,
     FileSize: arrayBuffer.byteLength
   };
-  
+
   return data;
 }
 

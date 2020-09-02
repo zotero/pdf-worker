@@ -2,7 +2,7 @@ let isNum = (c) => c >= '0' && c <= '9';
 
 function getSurroundedNumber(chs, ch) {
   let idx = chs.indexOf(ch);
-  
+
   while (
     idx > 0 && isNum(chs[idx - 1].c) &&
     Math.abs(chs[idx].rect[0] - chs[idx - 1].rect[2]) < chs[idx].rect[2] - chs[idx].rect[0] &&
@@ -10,9 +10,9 @@ function getSurroundedNumber(chs, ch) {
     ) {
     idx--;
   }
-  
+
   let str = chs[idx].c;
-  
+
   while (
     idx < chs.length - 1 && isNum(chs[idx + 1].c) &&
     Math.abs(chs[idx + 1].rect[0] - chs[idx].rect[2]) < chs[idx + 1].rect[2] - chs[idx + 1].rect[0] &&
@@ -21,7 +21,7 @@ function getSurroundedNumber(chs, ch) {
     idx++;
     str += chs[idx].c;
   }
-  
+
   return parseInt(str);
 }
 
@@ -51,7 +51,7 @@ exports.getPageLabelPoints = async function (pageIndex, chs1, chs2, chs3, chs4, 
   let chsNum2 = filterNums(chs2, pageHeight);
   let chsNum3 = filterNums(chs3, pageHeight);
   let chsNum4 = filterNums(chs4, pageHeight);
-  
+
   for (let ch1 of chsNum1) {
     for (let ch3 of chsNum3) {
       let { x: x1, y: y1 } = getRectCenter(ch1.rect);
@@ -61,12 +61,12 @@ exports.getPageLabelPoints = async function (pageIndex, chs1, chs2, chs3, chs4, 
         let num3 = getSurroundedNumber(chs3, ch3);
         if (num1 && num1 + 2 === num3) {
           let pos1 = { x: x1, y: y1, num: num1, idx: pageIndex };
-          
+
           let extractedNum2 = getSurroundedNumberAtPos(chs2, x1, y1);
           if (num1 + 1 === extractedNum2) {
             return [pos1];
           }
-          
+
           for (let ch2 of chsNum2) {
             for (let ch4 of chsNum4) {
               let { x: x1, y: y1 } = getRectCenter(ch2.rect);
@@ -81,37 +81,37 @@ exports.getPageLabelPoints = async function (pageIndex, chs1, chs2, chs3, chs4, 
               }
             }
           }
-          
-          
+
+
         }
       }
     }
   }
-  
+
   return null;
 }
 
 exports.getPageLabel = async function (pageIndex, chsPrev, chsCur, chsNext, points) {
   let numPrev, numCur, numNext;
-  
+
   let getNum = (chsNext, points) =>
     points.length > 0 && getSurroundedNumberAtPos(chsNext, points[0].x, points[0].y) ||
     points.length > 1 && getSurroundedNumberAtPos(chsNext, points[1].x, points[1].y);
-  
+
   if (chsPrev) {
     numPrev = getNum(chsPrev, points);
   }
-  
+
   numCur = getNum(chsCur, points);
-  
+
   if (chsNext) {
     numNext = getNum(chsNext, points);
   }
-  
+
   if (numCur && (numCur - 1 === numPrev || numCur + 1 === numNext)) {
     return numCur.toString();
   }
-  
+
   if (pageIndex < points[0].idx) {
     return (points[0].num - (points[0].idx - pageIndex)).toString();
   }

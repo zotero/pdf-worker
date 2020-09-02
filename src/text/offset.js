@@ -7,7 +7,7 @@ function rectsDist([ax1, ay1, ax2, ay2], [bx1, by1, bx2, by2]) {
   let right = ax2 < bx1;
   let bottom = by2 < ay1;
   let top = ay2 < by1;
-  
+
   if (top && left) {
     return pointsDist([ax1, ay2], [bx2, by1]);
   }
@@ -32,7 +32,7 @@ function rectsDist([ax1, ay1, ax2, ay2], [bx1, by1, bx2, by2]) {
   else if (top) {
     return by1 - ay2;
   }
-  
+
   return 0;
 }
 

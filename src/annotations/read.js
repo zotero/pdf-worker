@@ -1,50 +1,57 @@
 const { stringToPDFString } = require('../../pdf.js/build/lib/shared/util');
-const { getClosestColor } = require('../color');
+const { getClosestColor, arrayColorToHex } = require('../color');
 
 const utils = require('../utils');
 const putils = require('../putils');
 
-function arrayColorToHex(color) {
-  if (!color || color.length !== 3) return '';
-
-  let result = '#';
-  for (let c of color) {
-    let hex = c.toString(16);
-    result += hex.length === 1 ? '0' + hex : hex;
-  }
-
-  return result;
+/**
+ * Convert a raw PDF string or return an empty string
+ *
+ * @param value
+ * @returns {string}
+ */
+function getStr(value) {
+  return typeof value === 'string' ? value.slice(1, -1) : '';
 }
 
-function getStr(value) {
-  return value ? value.slice(1, -1) : '';
+function isValidNumber(value) {
+  return typeof value === 'number' && !isNaN(value);
 }
 
 exports.readRawAnnotations = function (structure) {
   let annotations = [];
   let rawPages = structure['/Root']['/Pages']['/Kids'];
   for (let pageIndex = 0; pageIndex < rawPages.length; pageIndex++) {
-    let rawAnnots = rawPages[pageIndex]['/Annots'];
+    let rawAnnots = rawPages[pageIndex] && rawPages[pageIndex]['/Annots'];
     if (!rawAnnots) continue;
     for (let rawAnnotIdx = 0; rawAnnotIdx < rawAnnots.length; rawAnnotIdx++) {
       let rawAnnot = rawAnnots[rawAnnotIdx];
       if (!rawAnnot) continue;
-      let type = rawAnnot['/Subtype'].slice(1);
-
-      // Supported types
+      let type = rawAnnot['/Subtype'];
+      if (!type) continue;
+      type = type.slice(1);
+      // Supported raw types
       if (!['Text', 'Highlight'].includes(type)) continue;
-      let annotation = {};
 
+      let annotation = {};
       annotation.type = type.toLowerCase();
+      annotation.id = '';
       // TODO: Read only Zotero annotation id
       // Id can be used for item deduplication
-      // annotation.id = getStr(rawAnnot['/NM']);
+      let str = getStr(rawAnnot['/NM']);
+      if (str.startsWith('Zotero-')) {
+        annotation.id = str.slice(7)
+      }
 
       let rects;
-      if (rawAnnot['/QuadPoints']) {
+      if (Array.isArray(rawAnnot['/QuadPoints'])
+        && rawAnnot['/QuadPoints'].length % 8 === 0
+        && rawAnnot['/QuadPoints'].every(x => isValidNumber(x))) {
         rects = utils.quadPointsToRects(rawAnnot['/QuadPoints']);
       }
-      else if (rawAnnot['/Rect']) {
+      else if (Array.isArray(rawAnnot['/Rect'])
+        && rawAnnot['/Rect'].length % 4 === 0
+        && rawAnnot['/Rect'].every(x => isValidNumber(x))) {
         rects = [putils.normalizeRect(rawAnnot['/Rect'])];
       }
       else {
@@ -55,6 +62,8 @@ exports.readRawAnnotations = function (structure) {
         pageIndex,
         rects
       };
+
+      // TODO: Extract `pageLabel`
 
       annotation.dateModified = utils.pdfDateToIso(getStr(rawAnnot['/M']));
       // annotation.authorName = stringToPDFString(getStr(rawAnnot['/T']));

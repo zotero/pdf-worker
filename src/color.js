@@ -1,11 +1,11 @@
 const colorDiff = require('color-diff');
 
 let colors = [
-  ['Red', '#f64276'],
-  ['Yellow', '#f8c348'],
-  ['Green', '#6cc055'],
-  ['Blue', '#589fee'],
-  ['Purple', '#ba6cd1']
+  ['Red', '#ff6666'],
+  ['Orange', '#ff8c19'],
+  ['Green', '#5fb236'],
+  ['Blue', '#2ea8e5'],
+  ['Purple', '#a28ae5']
 ];
 
 function hexToRgb(hex) {
@@ -17,18 +17,18 @@ function hexToRgb(hex) {
       parseInt(result[3], 16)
     ]
   }
-  return null;
+  return [0, 0, 0];
 }
 
 function arrayColorToHex(color) {
   if (!color || color.length !== 3) return '';
-  
+
   let result = '#';
   for (let c of color) {
     let hex = c.toString(16);
     result += hex.length === 1 ? '0' + hex : hex;
   }
-  
+
   return result;
 }
 
@@ -45,3 +45,4 @@ function getClosestColor(color) {
 }
 
 exports.getClosestColor = getClosestColor;
+exports.arrayColorToHex = arrayColorToHex;
