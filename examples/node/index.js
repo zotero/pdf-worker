@@ -32,7 +32,12 @@ async function main() {
     dateModified: '2019-04-19T08:21:13.011Z'
   }];
 
-  buf = await pdfWorker.writeAnnotations(buf, annotations);
+  try {
+    buf = await pdfWorker.writeAnnotations(buf, annotations);
+  }
+  catch (e) {
+    console.log(e);
+  }
   fs.writeFileSync(__dirname + '/../example-out.pdf', Buffer.from(buf), 'binary');
 }
 

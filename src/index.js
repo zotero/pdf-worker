@@ -122,34 +122,34 @@ async function writeAnnotations(buf, annotations, password) {
   return await pdf.assemblePdf('ArrayBuffer');
 }
 
-async function readAnnotations(buf, password, cmapProvider) {
+function duplicated(a, b) {
+  return (a.position.pageIndex === b.position.pageIndex &&
+    JSON.stringify(a.position.rects) === JSON.stringify(b.position.rects));
+}
+
+async function readAnnotations(buf, existingAnnotations, password, cmapProvider) {
   let pdf = new PDFAssembler();
   await pdf.init(buf, password);
   let pdfDocument = pdf.pdfManager.pdfDocument;
   let structure = await pdf.getPDFStructure();
   let annotations = await readRawAnnotations(structure, pdfDocument);
+  annotations = annotations.filter(a => !existingAnnotations.some(b => duplicated(a, b)));
 
   let pageChs;
   let pageHeight;
   let loadedPageIndex = null;
   for (let annotation of annotations) {
-    if (annotation.type === 'text') annotation.type = 'note';
-
-
     let pageIndex = annotation.position.pageIndex;
-
     if (loadedPageIndex !== pageIndex) {
       let page = await pdfDocument.getPage(pageIndex);
       let pageItems = await getText(page, cmapProvider);
       loadedPageIndex = pageIndex;
-
       pageChs = [];
       for (let item of pageItems) {
         for (let ch of item.chars) {
           pageChs.push(ch);
         }
       }
-
       pageHeight = page.view[3];
     }
 
@@ -163,7 +163,6 @@ async function readAnnotations(buf, password, cmapProvider) {
     }
     else {
       let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
-
       if (pageLabels && pageLabels[pageIndex]) {
         annotation.pageLabel = pageLabels[pageIndex];
       }
@@ -180,7 +179,7 @@ async function readAnnotations(buf, password, cmapProvider) {
         annotation.text = range.text;
       }
     }
-    // 'Text'
+    // 'note'
     else {
       offset = getClosestOffset(pageChs, annotation.position.rects[0]);
     }
@@ -189,13 +188,13 @@ async function readAnnotations(buf, password, cmapProvider) {
     annotation.sortIndex = [
       annotation.position.pageIndex.toString().padStart(5, '0'),
       offset.toString().padStart(6, '0'),
-      parseFloat(top).toFixed(3).padStart(9, '0')
+      Math.round(parseFloat(top)).toString().padStart(5, '0')
     ].join('|');
   }
   return annotations;
 }
 
-async function extractFulltext(buf, password, pagesCount, cmapProvider) {
+async function extractFulltext(buf, password, pagesNum, cmapProvider) {
   let pdf = new PDFAssembler();
   await pdf.init(buf, password);
 
@@ -203,12 +202,12 @@ async function extractFulltext(buf, password, pagesCount, cmapProvider) {
 
   let actualCount = pdf.pdfManager.pdfDocument.numPages;
 
-  if (!pagesCount || pagesCount > actualCount) {
-    pagesCount = actualCount;
+  if (!pagesNum || pagesNum > actualCount) {
+    pagesNum = actualCount;
   }
 
   let pageIndex = 0;
-  for (; pageIndex < pagesCount; pageIndex++) {
+  for (; pageIndex < pagesNum; pageIndex++) {
     let page = await pdf.pdfManager.pdfDocument.getPage(pageIndex);
     let pageItems = await getText(page, cmapProvider);
     let text = pageItems.map(x => x.str).join(' ');
@@ -225,6 +224,10 @@ async function extractStructure() {
 
 }
 
+function errObject(err) {
+  return JSON.parse(JSON.stringify(err, Object.getOwnPropertyNames(err)));
+}
+
 async function extractInfo(buf, password) {
   return getInfo(buf, password);
 }
@@ -233,11 +236,11 @@ if (typeof self !== 'undefined') {
   let promiseId = 0;
   let waitingPromises = {};
 
-  self.query = async function (op, data) {
+  self.query = async function (action, data) {
     return new Promise(function (resolve) {
       promiseId++;
       waitingPromises[promiseId] = resolve;
-      self.postMessage({ id: promiseId, op, data });
+      self.postMessage({ id: promiseId, action, data });
     });
   };
 
@@ -260,33 +263,34 @@ if (typeof self !== 'undefined') {
       return query('FetchBuiltInCMap', name);
     }
 
-    if (message.op === 'write') {
+    if (message.action === 'export') {
       let buf;
       try {
         buf = await writeAnnotations(message.data.buf, message.data.annotations, message.data.password);
         self.postMessage({ responseId: message.id, data: { buf } }, [buf]);
       }
       catch (e) {
+        console.log(e);
         self.postMessage({
           responseId: message.id,
-          error: { message: e.message, name: e.name, stack: e.stack }
+          error: errObject(e)
         }, []);
       }
     }
-    else if (message.op === 'read') {
+    else if (message.action === 'import') {
       let annotations;
       try {
-        annotations = await readAnnotations(message.data.buf, message.data.password, cmapProvider);
+        annotations = await readAnnotations(message.data.buf, message.data.existingAnnotations, message.data.password, cmapProvider);
         self.postMessage({ responseId: message.id, data: { annotations } }, []);
       }
       catch (e) {
         self.postMessage({
           responseId: message.id,
-          error: { message: e.message, name: e.name, stack: e.stack }
+          error: errObject(e)
         }, []);
       }
     }
-    else if (message.op === 'fulltext') {
+    else if (message.action === 'extractFulltext') {
       let res;
       try {
         res = await extractFulltext(message.data.buf, message.data.password, 0, cmapProvider);
@@ -295,11 +299,11 @@ if (typeof self !== 'undefined') {
       catch (e) {
         self.postMessage({
           responseId: message.id,
-          error: { message: e.message, name: e.name, stack: e.stack }
+          error: errObject(e)
         }, []);
       }
     }
-    else if (message.op === 'info') {
+    else if (message.action === 'getInfo') {
       let res;
       try {
         res = await extractInfo(message.data.buf, message.data.password);
@@ -308,7 +312,7 @@ if (typeof self !== 'undefined') {
       catch (e) {
         self.postMessage({
           responseId: message.id,
-          error: { message: e.message, name: e.name, stack: e.stack }
+          error: errObject(e)
         }, []);
       }
     }

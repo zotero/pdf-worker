@@ -1,3 +1,5 @@
+let { readRawAnnotation } = require('./read');
+let { getRawPageView } = require('./common');
 const utils = require('../utils');
 
 exports.deleteAnnotations = function (structure, ids) {
@@ -22,6 +24,15 @@ exports.deleteAnnotations = function (structure, ids) {
   }
 }
 
+function similarAnnotations(a, b) {
+  return (
+    a.position.pageIndex === b.position.pageIndex
+    && a.type === b.type
+    && a.comment === b.comment
+    && JSON.stringify(a.position.rects) === JSON.stringify(b.position.rects)
+  );
+}
+
 exports.deleteMatchedAnnotations = function (structure, annotations) {
   for (let pageIndex = 0; pageIndex < structure['/Root']['/Pages']['/Kids'].length; pageIndex++) {
     let rawPage = structure['/Root']['/Pages']['/Kids'][pageIndex];
@@ -29,10 +40,10 @@ exports.deleteMatchedAnnotations = function (structure, annotations) {
     for (let i = 0; i < rawPage['/Annots'].length; i++) {
       let rawAnnot = rawPage['/Annots'][i];
       if (!rawAnnot) continue;
-      let quadPoints = rawAnnot['/QuadPoints'];
-      if (quadPoints) {
-        let rects = utils.quadPointsToRects(quadPoints);
-        if (annotations.some(x => x.position.pageIndex === pageIndex && JSON.stringify(x.position.rects) === JSON.stringify(rects))) {
+      let view = getRawPageView(rawPage);
+      let a = readRawAnnotation(rawAnnot, pageIndex, view);
+      if (a) {
+        if (annotations.some(b => similarAnnotations(a, b))) {
           rawPage['/Annots'].splice(i, 1);
           console.log('Deleting matching annotation', pageIndex + 1);
           i--;

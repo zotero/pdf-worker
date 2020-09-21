@@ -108,9 +108,9 @@ function annotationToRaw(annotation) {
       '/Subtype': '/Highlight',
       '/QuadPoints': rectsToQuads(annotation.position.rects).map(x => x.toFixed(3)),
       '/M': '(' + dateToRaw(annotation.dateModified) + ')',
-      '/T': '(' + stringToRaw(annotation.authorName || '') + ')',
+      '/T': '(' + stringToRaw(annotation.authorName) + ')',
       '/Contents': '(' + stringToRaw(annotation.comment) + ')',
-      '/NM': '(' + annotation.id + ')',
+      '/NM': '(' + 'Zotero-' + annotation.id + ')',
       '/C': colorToRaw(annotation.color) || [1, 1, 0],
       '/AP': {
         '/N': {
@@ -140,7 +140,7 @@ function annotationToRaw(annotation) {
       'gen': 0
     };
   }
-  else if (annotation.type === 'square') {
+  else if (annotation.type === 'area') {
     let p = [
       containerRect[0],
       containerRect[1],
@@ -161,7 +161,7 @@ function annotationToRaw(annotation) {
       '/M': '(' + dateToRaw(annotation.dateModified) + ')',
       '/T': '(' + stringToRaw(annotation.authorName) + ')',
       '/Contents': '(' + stringToRaw(annotation.comment) + ')',
-      '/NM': '(' + annotation.id + ')',
+      '/NM': '(' + 'Zotero-' + annotation.id + ')',
       '/AP': {
         '/N': {
           '/BBox': containerRect,
