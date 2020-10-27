@@ -1,4 +1,5 @@
-const structure = require('./structure');
+const { getLines } = require('./structure');
+const { getClosestOffset } = require('./offset');
 
 function isDash(c) {
   let re = /[\x2D\u058A\u05BE\u1400\u1806\u2010-\u2015\u2E17\u2E1A\u2E3A\u2E3B\u301C\u3030\u30A0\uFE31\uFE32\uFE58\uFE63\uFF0D]/;
@@ -12,55 +13,46 @@ function quickIntersectRect(r1, r2) {
     r2[3] < r1[1]);
 }
 
-function getPoints(chs, rects) {
-  let r;
-  r = rects[0];
-  let n = 0;
-
-  let chStart = null;
-  let chStartNum = Infinity;
-
-  let chPrev = null;
-  for (let ch of chs) {
-    n++;
-    let centerRect = [
-      ch.rect[0] + (ch.rect[2] - ch.rect[0]) / 2,
-      ch.rect[1] + (ch.rect[3] - ch.rect[1]) / 2,
-      ch.rect[0] + (ch.rect[2] - ch.rect[0]) / 2,
-      ch.rect[1] + (ch.rect[3] - ch.rect[1]) / 2
-    ];
-    if (quickIntersectRect(centerRect, r) && chStartNum > n) {
-      chStart = ch;
-      chStartNum = n;
-    }
-    chPrev = ch;
+// Using non-normalized rect containing selection start and end points
+function getRangeBySelectionRect(chs, r) {
+  let startIndex = getClosestOffset(chs, [r[0], r[1], r[0], r[1]]);
+  let endIndex = getClosestOffset(chs, [r[2], r[3], r[2], r[3]]);
+  if (startIndex < endIndex) {
+    return { chStart: chs[startIndex], chEnd: chs[endIndex] };
   }
+  return { chStart: chs[endIndex], chEnd: chs[startIndex] };
+}
 
-  n = 0;
-  r = rects.slice(-1)[0];
-  let chEnd = null;
-  let chEndNum = 0;
+function getCenterRect(r) {
+  return [
+    r[0] + (r[2] - r[0]) / 2,
+    r[1] + (r[3] - r[1]) / 2,
+    r[0] + (r[2] - r[0]) / 2,
+    r[1] + (r[3] - r[1]) / 2
+  ];
+}
 
-  chPrev = null;
+function getRangeByHighlightRects(chs, rects) {
+  let startIndex = Infinity;
   for (let i = 0; i < chs.length; i++) {
     let ch = chs[i];
-    n++;
-    let centerRect = [
-      ch.rect[0] + (ch.rect[2] - ch.rect[0]) / 2,
-      ch.rect[1] + (ch.rect[3] - ch.rect[1]) / 2,
-      ch.rect[0] + (ch.rect[2] - ch.rect[0]) / 2,
-      ch.rect[1] + (ch.rect[3] - ch.rect[1]) / 2
-    ];
-
-    if (quickIntersectRect(centerRect, r) && n > chEndNum) {
-      chEnd = ch;
-      chEndNum = n;
-      chPrev = ch;
+    if (quickIntersectRect(getCenterRect(ch.rect), rects[0])) {
+      startIndex = i;
+      break;
     }
   }
 
-  if (chStartNum < chEndNum) {
-    return { chStart, chEnd }
+  let endIndex = 0;
+  for (let i = chs.length - 1; i >= 0; i--) {
+    let ch = chs[i];
+    if (quickIntersectRect(getCenterRect(ch.rect), rects[rects.length - 1])) {
+      endIndex = i;
+      break;
+    }
+  }
+
+  if (startIndex < endIndex) {
+    return { chStart: chs[startIndex], chEnd: chs[endIndex] }
   }
   else {
     return null;
@@ -76,11 +68,18 @@ function filter(chs) {
   })
 }
 
-exports.extractRange = function (chs, rects) {
+exports.extractRange = function (chs, rects, selection) {
   if (!rects.length) return;
   chs = filter(chs);
-  let lines = structure.getLines(chs);
-  let chPoints = getPoints(chs, rects);
+  let lines = getLines(chs);
+  let chPoints;
+  if (selection) {
+    chPoints = getRangeBySelectionRect(chs, rects[0]);
+  }
+  else {
+    chPoints = getRangeByHighlightRects(chs, rects);
+  }
+
   if (!chPoints) return;
   let { chStart, chEnd } = chPoints;
 

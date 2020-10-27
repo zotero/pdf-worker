@@ -14,7 +14,7 @@ async function cmapProvider(name) {
 
 async function main() {
   let buf = fs.readFileSync(__dirname + '/../example.pdf');
-  let annotations = await pdfWorker.readAnnotations(buf, '', cmapProvider);
+  let annotations = await pdfWorker.readAnnotations(buf, [], '', cmapProvider);
   console.log(annotations);
 
   let fulltext = await pdfWorker.extractFulltext(buf, '', 1, cmapProvider);
