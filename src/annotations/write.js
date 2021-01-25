@@ -140,7 +140,7 @@ function annotationToRaw(annotation) {
       'gen': 0
     };
   }
-  else if (annotation.type === 'area') {
+  else if (annotation.type === 'image') {
     let p = [
       containerRect[0],
       containerRect[1],
@@ -153,11 +153,9 @@ function annotationToRaw(annotation) {
       '/Subtype': '/Square',
       '/Rect': containerRect,
       '/BS': {
-        '/W': 1
+        '/W': 2
       },
-      '/IC': [0.803922, 0.803922, 0.803922],
-      '/C': colorToRaw(annotation.color) || [0.611765, 0.611765, 0.611765],
-      '/CA': 0.3,
+      '/C': colorToRaw(annotation.color),
       '/M': '(' + dateToRaw(annotation.dateModified) + ')',
       '/T': '(' + stringToRaw(annotation.authorName) + ')',
       '/Contents': '(' + stringToRaw(annotation.comment) + ')',
@@ -168,14 +166,14 @@ function annotationToRaw(annotation) {
           '/FormType': 1,
           '/Resources': {
             '/ExtGState': {
-              '/G0': { '/CA': 0.377175, '/ca': 0.377175, 'num': 0, 'gen': 0 },
+              '/G0': { '/CA': 1, '/ca': 1, 'num': 0, 'gen': 0 },
               'num': 0,
               'gen': 0
             }, 'num': 0, 'gen': 0
           },
           '/Subtype': '/Form',
           '/Type': '/XObject',
-          'stream': '/G0 gs\r0.611765 0.611765 0.611765 RG\r0.803922 0.803922 0.803922 rg\r2.78738 w\r[] 0 d\r' + p + ' re\rh\rB*\r',
+          'stream': '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' RG\r0 0 0 0 k\r2 w\r[] 0 d\r' + p + ' re\rS\r',
           'num': 0,
           'gen': 0
         }

@@ -122,9 +122,24 @@ async function writeAnnotations(buf, annotations, password) {
   return await pdf.assemblePdf('ArrayBuffer');
 }
 
+function getKey(annotation) {
+  return annotation.type + annotation.position.pageIndex + JSON.stringify(annotation.position.rects) + annotation.comment;
+}
+
 function duplicated(a, b) {
-  return (a.position.pageIndex === b.position.pageIndex &&
-    JSON.stringify(a.position.rects) === JSON.stringify(b.position.rects));
+  return getKey(a) === getKey(b);
+}
+
+function deduplicate(annotations) {
+  return [...new Map(annotations.map(a => [getKey(a), a]))].map(([, v]) => v);
+}
+
+function getImported(current, existing) {
+  return current.filter(a => !existing.some(b => duplicated(a, b)));
+}
+
+function getDeleted(current, existing) {
+  return existing.filter(a => !current.some(b => duplicated(a, b))).map(a => a.id);
 }
 
 async function readAnnotations(buf, existingAnnotations, password, cmapProvider) {
@@ -133,12 +148,16 @@ async function readAnnotations(buf, existingAnnotations, password, cmapProvider)
   let pdfDocument = pdf.pdfManager.pdfDocument;
   let structure = await pdf.getPDFStructure();
   let annotations = await readRawAnnotations(structure, pdfDocument);
-  annotations = annotations.filter(a => !existingAnnotations.some(b => duplicated(a, b)));
+
+  annotations = deduplicate(annotations);
+
+  let imported = getImported(annotations, existingAnnotations);
+  let deleted = getDeleted(annotations, existingAnnotations);
 
   let pageChs;
   let pageHeight;
   let loadedPageIndex = null;
-  for (let annotation of annotations) {
+  for (let annotation of imported) {
     let pageIndex = annotation.position.pageIndex;
     if (loadedPageIndex !== pageIndex) {
       let page = await pdfDocument.getPage(pageIndex);
@@ -191,7 +210,7 @@ async function readAnnotations(buf, existingAnnotations, password, cmapProvider)
       Math.round(parseFloat(top)).toString().padStart(5, '0')
     ].join('|');
   }
-  return annotations;
+  return { imported, deleted };
 }
 
 async function extractFulltext(buf, password, pagesNum, cmapProvider) {
@@ -280,8 +299,14 @@ if (typeof self !== 'undefined') {
     else if (message.action === 'import') {
       let annotations;
       try {
-        annotations = await readAnnotations(message.data.buf, message.data.existingAnnotations, message.data.password, cmapProvider);
-        self.postMessage({ responseId: message.id, data: { annotations } }, []);
+        let {
+          imported,
+          deleted
+        } = await readAnnotations(message.data.buf, message.data.existingAnnotations, message.data.password, cmapProvider);
+        self.postMessage({
+          responseId: message.id,
+          data: { imported, deleted }
+        }, []);
       }
       catch (e) {
         self.postMessage({

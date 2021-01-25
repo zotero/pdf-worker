@@ -80,7 +80,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
     return null;
   }
   type = type.slice(1);
-  if (!['Text', 'Highlight'].includes(type)) {
+  if (!['Text', 'Highlight', 'Square'].includes(type)) {
     return null;
   }
 
@@ -89,12 +89,19 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
   if (type === 'text') {
     type = 'note';
   }
+  else if (type === 'square') {
+    type = 'image';
+  }
 
   let annotation = {};
-  annotation.type = type.toLowerCase();
+  annotation.type = type;
   let str = getStr(rawAnnot['/NM']);
   if (str.startsWith('Zotero-')) {
     annotation.id = str.slice(7)
+  }
+
+  if (type === 'square' && !annotation.id) {
+    return null;
   }
 
   let rects;
@@ -128,6 +135,5 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
   // annotation.authorName = stringToPDFString(getStr(rawAnnot['/T']));
   annotation.comment = stringToPDFString(getStr(rawAnnot['/Contents']));
   annotation.color = getClosestColor(arrayColorToHex(putils.getColorArray(rawAnnot['/C'])));
-  console.log('raw', annotation)
   return annotation;
 }
