@@ -13,7 +13,6 @@
   "author": "Martynas Bagdonas",
   "license": "AGPL-3.0",
   "dependencies": {
-    "color-diff": "1.2.0",
     "pako": "1.0.11"
   },
   "devDependencies": {

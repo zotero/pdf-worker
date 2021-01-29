@@ -117,7 +117,6 @@ async function writeAnnotations(buf, annotations, password) {
   let pdf = new PDFAssembler();
   await pdf.init(buf, password);
   let structure = await pdf.getPDFStructure();
-  deleteMatchedAnnotations(structure, annotations);
   writeRawAnnotations(structure, annotations);
   return await pdf.assemblePdf('ArrayBuffer');
 }
@@ -205,9 +204,9 @@ async function readAnnotations(buf, existingAnnotations, password, cmapProvider)
 
     let top = pageHeight - annotation.position.rects[0][3];
     annotation.sortIndex = [
-      annotation.position.pageIndex.toString().padStart(5, '0'),
-      offset.toString().padStart(6, '0'),
-      Math.round(parseFloat(top)).toString().padStart(5, '0')
+      annotation.position.pageIndex.toString().slice(0, 5).padStart(5, '0'),
+      offset.toString().slice(0, 6).padStart(6, '0'),
+      parseInt(top).toString().slice(0, 5).padStart(5, '0')
     ].join('|');
   }
   return { imported, deleted };

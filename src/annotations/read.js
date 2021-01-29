@@ -1,12 +1,12 @@
 const { stringToPDFString } = require('../../pdf.js/build/lib/shared/util');
-const { getClosestColor, arrayColorToHex } = require('../color');
+const { arrayColorToHex } = require('../color');
 const { getRawPageView } = require('./common');
 
 const utils = require('../utils');
 const putils = require('../putils');
 
-const NOTE_WIDTH = 20;
-const NOTE_HEIGHT = 20;
+const NOTE_WIDTH = 24;
+const NOTE_HEIGHT = 24;
 
 /**
  * Convert a raw PDF string or return an empty string
@@ -80,8 +80,12 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
     return null;
   }
   type = type.slice(1);
-  if (!['Text', 'Highlight', 'Square'].includes(type)) {
+  if (!['Text', 'Highlight', 'Underline', 'Square'].includes(type)) {
     return null;
+  }
+
+  if (type === 'Underline') {
+    type = 'Highlight';
   }
 
   type = type.toLowerCase();
@@ -100,7 +104,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
     annotation.id = str.slice(7)
   }
 
-  if (type === 'square' && !annotation.id) {
+  if (type === 'image' && !annotation.id) {
     return null;
   }
 
@@ -126,6 +130,8 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
     rects = [resizeAndFitRect(rects[0], NOTE_WIDTH, NOTE_HEIGHT, view)];
   }
 
+  rects = rects.map(r => r.map(n => Math.round(n * 1000) / 1000));
+
   annotation.position = {
     pageIndex,
     rects
@@ -134,6 +140,6 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
   annotation.dateModified = utils.pdfDateToIso(getStr(rawAnnot['/M']));
   // annotation.authorName = stringToPDFString(getStr(rawAnnot['/T']));
   annotation.comment = stringToPDFString(getStr(rawAnnot['/Contents']));
-  annotation.color = getClosestColor(arrayColorToHex(putils.getColorArray(rawAnnot['/C'])));
+  annotation.color = arrayColorToHex(putils.getColorArray(rawAnnot['/C'] || rawAnnot['/IC']));
   return annotation;
 }

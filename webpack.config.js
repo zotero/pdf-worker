@@ -15,6 +15,9 @@ module.exports = {
     globalObject: 'this',
     umdNamedDefine: true
   },
+  optimization: {
+    minimize: false
+  },
   module: {
     rules: [
       {

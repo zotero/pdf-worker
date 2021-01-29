@@ -54,6 +54,8 @@ function dateToRaw(str) {
 }
 
 function annotationToRaw(annotation) {
+  annotation = JSON.parse(JSON.stringify(annotation));
+  annotation.position.rects = annotation.position.rects.map(r => r.map(n => Math.round(n * 1000) / 1000));
   let containerRect = annotation.position.rects[0].slice();
   for (let rect of annotation.position.rects) {
     containerRect[0] = Math.min(containerRect[0], rect[0]);
@@ -61,8 +63,6 @@ function annotationToRaw(annotation) {
     containerRect[2] = Math.max(containerRect[2], rect[2]);
     containerRect[3] = Math.max(containerRect[3], rect[3]);
   }
-
-  containerRect = containerRect.map(x => x.toFixed(3));
 
   if (annotation.type === 'note') {
     return {
@@ -95,7 +95,6 @@ function annotationToRaw(annotation) {
   else if (annotation.type === 'highlight') {
     let p = '';
     for (let rect of annotation.position.rects) {
-      rect = rect.map(x => x.toFixed(3));
       p += rect[0] + ' ' + rect[1] + ' m\r';
       p += rect[2] + ' ' + rect[1] + ' l\r';
       p += rect[2] + ' ' + rect[3] + ' l\r';
@@ -106,7 +105,7 @@ function annotationToRaw(annotation) {
       '/Type': '/Annot',
       '/Rect': containerRect,
       '/Subtype': '/Highlight',
-      '/QuadPoints': rectsToQuads(annotation.position.rects).map(x => x.toFixed(3)),
+      '/QuadPoints': rectsToQuads(annotation.position.rects),
       '/M': '(' + dateToRaw(annotation.dateModified) + ')',
       '/T': '(' + stringToRaw(annotation.authorName) + ')',
       '/Contents': '(' + stringToRaw(annotation.comment) + ')',
