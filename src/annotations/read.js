@@ -104,6 +104,11 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
     annotation.id = str.slice(7)
   }
 
+  str = getStr(rawAnnot['/ZOTERO:Key']);
+  if (str) {
+    annotation.id = str;
+  }
+
   if (type === 'image' && !annotation.id) {
     return null;
   }
