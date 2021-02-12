@@ -5,8 +5,7 @@ const { getRawPageView } = require('./common');
 const utils = require('../utils');
 const putils = require('../putils');
 
-const NOTE_WIDTH = 24;
-const NOTE_HEIGHT = 24;
+const NOTE_SIZE = 22;
 
 /**
  * Convert a raw PDF string or return an empty string
@@ -45,10 +44,10 @@ exports.readRawAnnotations = function (structure) {
 function resizeAndFitRect(rect, width, height, view) {
   let point = [rect[0] + (rect[2] - rect[0]) / 2, rect[1] + (rect[3] - rect[1]) / 2];
   rect = [
-    point[0] - NOTE_WIDTH / 2,
-    point[1] - NOTE_HEIGHT / 2,
-    point[0] + NOTE_WIDTH / 2,
-    point[1] + NOTE_HEIGHT / 2
+    point[0] - NOTE_SIZE / 2,
+    point[1] - NOTE_SIZE / 2,
+    point[0] + NOTE_SIZE / 2,
+    point[1] + NOTE_SIZE / 2
   ];
 
   if (rect[0] < 0) {
@@ -132,7 +131,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
     if (rects.length > 1) {
       return null;
     }
-    rects = [resizeAndFitRect(rects[0], NOTE_WIDTH, NOTE_HEIGHT, view)];
+    rects = [resizeAndFitRect(rects[0], NOTE_SIZE, NOTE_SIZE, view)];
   }
 
   rects = rects.map(r => r.map(n => Math.round(n * 1000) / 1000));
