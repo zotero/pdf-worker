@@ -6,6 +6,7 @@
 - [ ] Extract PDF file text structure that can be fed into recognizer-server
 
 ## Build
+
 Clone the repository:
 
 ```

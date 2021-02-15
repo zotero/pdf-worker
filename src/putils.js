@@ -22,41 +22,41 @@ const { ColorSpace } = require('../pdf.js/build/lib/core/colorspace');
 // intersection of rect1 and rect2. If no intersection, returns 'false'
 // The rectangle coordinates of rect1, rect2 should be [x1, y1, x2, y2]
 function intersect(rect1, rect2) {
-  function compare(a, b) {
-    return a - b;
-  }
+	function compare(a, b) {
+		return a - b;
+	}
 
-  // Order points along the axes
-  var orderedX = [rect1[0], rect1[2], rect2[0], rect2[2]].sort(compare),
-    orderedY = [rect1[1], rect1[3], rect2[1], rect2[3]].sort(compare),
-    result = [];
+	// Order points along the axes
+	var orderedX = [rect1[0], rect1[2], rect2[0], rect2[2]].sort(compare),
+		orderedY = [rect1[1], rect1[3], rect2[1], rect2[3]].sort(compare),
+		result = [];
 
-  rect1 = Util_normalizeRect(rect1);
-  rect2 = Util_normalizeRect(rect2);
+	rect1 = Util_normalizeRect(rect1);
+	rect2 = Util_normalizeRect(rect2);
 
-  // X: first and second points belong to different rectangles?
-  if ((orderedX[0] === rect1[0] && orderedX[1] === rect2[0]) ||
-    (orderedX[0] === rect2[0] && orderedX[1] === rect1[0])) {
-    // Intersection must be between second and third points
-    result[0] = orderedX[1];
-    result[2] = orderedX[2];
-  }
-  else {
-    return false;
-  }
+	// X: first and second points belong to different rectangles?
+	if ((orderedX[0] === rect1[0] && orderedX[1] === rect2[0]) ||
+		(orderedX[0] === rect2[0] && orderedX[1] === rect1[0])) {
+		// Intersection must be between second and third points
+		result[0] = orderedX[1];
+		result[2] = orderedX[2];
+	}
+	else {
+		return false;
+	}
 
-  // Y: first and second points belong to different rectangles?
-  if ((orderedY[0] === rect1[1] && orderedY[1] === rect2[1]) ||
-    (orderedY[0] === rect2[1] && orderedY[1] === rect1[1])) {
-    // Intersection must be between second and third points
-    result[1] = orderedY[1];
-    result[3] = orderedY[2];
-  }
-  else {
-    return false;
-  }
+	// Y: first and second points belong to different rectangles?
+	if ((orderedY[0] === rect1[1] && orderedY[1] === rect2[1]) ||
+		(orderedY[0] === rect2[1] && orderedY[1] === rect1[1])) {
+		// Intersection must be between second and third points
+		result[1] = orderedY[1];
+		result[3] = orderedY[2];
+	}
+	else {
+		return false;
+	}
 
-  return result;
+	return result;
 }
 
 /**
@@ -70,36 +70,36 @@ function intersect(rect1, rect2) {
  *                        4 (CMYK) elements
  */
 function getColorArray(color) {
-  const rgbColor = new Uint8ClampedArray(3);
-  if (!Array.isArray(color)) {
-    return rgbColor;
-  }
-  let value = null;
-  switch (color.length) {
-    case 0: // Transparent, which we indicate with a null value
-      value = null;
-      break;
+	const rgbColor = new Uint8ClampedArray(3);
+	if (!Array.isArray(color)) {
+		return rgbColor;
+	}
+	let value = null;
+	switch (color.length) {
+		case 0: // Transparent, which we indicate with a null value
+			value = null;
+			break;
 
-    case 1: // Convert grayscale to RGB
-      ColorSpace.singletons.gray.getRgbItem(color, 0, rgbColor, 0);
-      this.color = rgbColor;
-      break;
+		case 1: // Convert grayscale to RGB
+			ColorSpace.singletons.gray.getRgbItem(color, 0, rgbColor, 0);
+			this.color = rgbColor;
+			break;
 
-    case 3: // Convert RGB percentages to RGB
-      ColorSpace.singletons.rgb.getRgbItem(color, 0, rgbColor, 0);
-      value = rgbColor;
-      break;
+		case 3: // Convert RGB percentages to RGB
+			ColorSpace.singletons.rgb.getRgbItem(color, 0, rgbColor, 0);
+			value = rgbColor;
+			break;
 
-    case 4: // Convert CMYK to RGB
-      ColorSpace.singletons.cmyk.getRgbItem(color, 0, rgbColor, 0);
-      value = rgbColor;
-      break;
+		case 4: // Convert CMYK to RGB
+			ColorSpace.singletons.cmyk.getRgbItem(color, 0, rgbColor, 0);
+			value = rgbColor;
+			break;
 
-    default:
-      value = rgbColor;
-      break;
-  }
-  return value;
+		default:
+			value = rgbColor;
+			break;
+	}
+	return value;
 }
 
 // Normalize rectangle rect=[x1, y1, x2, y2] so that (x1,y1) < (x2,y2)
@@ -107,20 +107,20 @@ function getColorArray(color) {
 // means normalization to (BL,TR) ordering. For systems with origin in the
 // top-left, this means (TL,BR) ordering.
 function normalizeRect(rect) {
-  var r = rect.slice(0); // clone rect
-  if (rect[0] > rect[2]) {
-    r[0] = rect[2];
-    r[2] = rect[0];
-  }
-  if (rect[1] > rect[3]) {
-    r[1] = rect[3];
-    r[3] = rect[1];
-  }
-  return r;
+	var r = rect.slice(0); // clone rect
+	if (rect[0] > rect[2]) {
+		r[0] = rect[2];
+		r[2] = rect[0];
+	}
+	if (rect[1] > rect[3]) {
+		r[1] = rect[3];
+		r[3] = rect[1];
+	}
+	return r;
 }
 
 module.exports = {
-  intersect,
-  getColorArray,
-  normalizeRect
+	intersect,
+	getColorArray,
+	normalizeRect
 };
