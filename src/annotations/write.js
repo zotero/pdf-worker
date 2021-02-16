@@ -160,7 +160,7 @@ function annotationToRaw(annotation) {
 			'/T': '(' + stringToRaw(annotation.authorName) + ')',
 			'/Contents': '(' + stringToRaw(annotation.comment) + ')',
 			'/NM': '(' + 'Zotero-' + annotation.id + ')',
-			'/ZOTERO:Key': '(' + annotation.id + ')',
+			'/Zotero:Key': '(' + annotation.id + ')',
 			'/AP': {
 				'/N': {
 					'/BBox': containerRect,

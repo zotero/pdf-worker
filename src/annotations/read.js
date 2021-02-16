@@ -103,7 +103,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 		annotation.id = str.slice(7);
 	}
 
-	str = getStr(rawAnnot['/ZOTERO:Key']);
+	str = getStr(rawAnnot['/Zotero:Key']);
 	if (str) {
 		annotation.id = str;
 	}
