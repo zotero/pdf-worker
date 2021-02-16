@@ -251,22 +251,22 @@ async function extractInfo(buf, password) {
 }
 
 if (typeof self !== 'undefined') {
-	let promiseId = 0;
+	let promiseID = 0;
 	let waitingPromises = {};
 
 	self.query = async function (action, data) {
 		return new Promise(function (resolve) {
-			promiseId++;
-			waitingPromises[promiseId] = resolve;
-			self.postMessage({ id: promiseId, action, data });
+			promiseID++;
+			waitingPromises[promiseID] = resolve;
+			self.postMessage({ id: promiseID, action, data });
 		});
 	};
 
 	self.onmessage = async function (e) {
 		let message = e.data;
 
-		if (message.responseId) {
-			let resolve = waitingPromises[message.responseId];
+		if (message.responseID) {
+			let resolve = waitingPromises[message.responseID];
 			if (resolve) {
 				resolve(message.data);
 			}
@@ -285,12 +285,12 @@ if (typeof self !== 'undefined') {
 			let buf;
 			try {
 				buf = await writeAnnotations(message.data.buf, message.data.annotations, message.data.password);
-				self.postMessage({ responseId: message.id, data: { buf } }, [buf]);
+				self.postMessage({ responseID: message.id, data: { buf } }, [buf]);
 			}
 			catch (e) {
 				console.log(e);
 				self.postMessage({
-					responseId: message.id,
+					responseID: message.id,
 					error: errObject(e)
 				}, []);
 			}
@@ -303,13 +303,13 @@ if (typeof self !== 'undefined') {
 					deleted
 				} = await readAnnotations(message.data.buf, message.data.existingAnnotations, message.data.password, cmapProvider);
 				self.postMessage({
-					responseId: message.id,
+					responseID: message.id,
 					data: { imported, deleted }
 				}, []);
 			}
 			catch (e) {
 				self.postMessage({
-					responseId: message.id,
+					responseID: message.id,
 					error: errObject(e)
 				}, []);
 			}
@@ -318,11 +318,11 @@ if (typeof self !== 'undefined') {
 			let res;
 			try {
 				res = await extractFulltext(message.data.buf, message.data.password, 0, cmapProvider);
-				self.postMessage({ responseId: message.id, data: res }, []);
+				self.postMessage({ responseID: message.id, data: res }, []);
 			}
 			catch (e) {
 				self.postMessage({
-					responseId: message.id,
+					responseID: message.id,
 					error: errObject(e)
 				}, []);
 			}
@@ -331,11 +331,11 @@ if (typeof self !== 'undefined') {
 			let res;
 			try {
 				res = await extractInfo(message.data.buf, message.data.password);
-				self.postMessage({ responseId: message.id, data: res }, []);
+				self.postMessage({ responseID: message.id, data: res }, []);
 			}
 			catch (e) {
 				self.postMessage({
-					responseId: message.id,
+					responseID: message.id,
 					error: errObject(e)
 				}, []);
 			}
