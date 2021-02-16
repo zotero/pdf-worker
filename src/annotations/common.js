@@ -12,7 +12,7 @@ function getBoundingBox(box) {
 function getRawPageView(rawPage) {
 	const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
 	let mediaBox = rawPage['/MediaBox'] || LETTER_SIZE_MEDIABOX;
-	let cropBox = rawPage['CropBox'] || mediaBox;
+	let cropBox = rawPage['/CropBox'] || mediaBox;
 
 	// From the spec, 6th ed., p.963:
 	// "The crop, bleed, trim, and art boxes should not ordinarily
