@@ -1,24 +1,31 @@
 {
-  "name": "pdf-worker",
-  "version": "1.0.0",
-  "description": "A PDF toolkit that runs on Node.js and Web Worker",
-  "main": "",
-  "scripts": {
-    "build": "npm run build:pdf.js && npm run build:worker",
-    "build:pdf.js": "scripts/build-pdfjs",
-    "build:worker": "NODE_ENV=production webpack --display-modules",
-    "devel:worker": "webpack --display-modules",
-    "test": "NODE_ENV=test ./node_modules/mocha/bin/mocha"
-  },
-  "author": "Martynas Bagdonas",
-  "license": "AGPL-3.0",
-  "dependencies": {
-    "pako": "1.0.11"
-  },
-  "devDependencies": {
-    "chai": "^4.2.0",
-    "mocha": "^7.0.1",
-    "webpack": "^4.41.5",
-    "webpack-cli": "^3.3.10"
-  }
+	"name": "pdf-worker",
+	"version": "1.0.0",
+	"description": "A PDF toolkit that runs on Node.js and Web Worker",
+	"main": "",
+	"scripts": {
+		"build": "npm run build:pdf.js && npm run build:worker",
+		"build:pdf.js": "scripts/build-pdfjs",
+		"build:worker": "NODE_ENV=production webpack --display-modules",
+		"devel:worker": "webpack --display-modules",
+		"test": "NODE_ENV=test ./node_modules/mocha/bin/mocha"
+	},
+	"author": "Martynas Bagdonas",
+	"license": "AGPL-3.0",
+	"dependencies": {
+		"pako": "1.0.11"
+	},
+	"devDependencies": {
+		"chai": "^4.2.0",
+		"mocha": "^7.0.1",
+		"webpack": "^4.41.5",
+		"webpack-cli": "^3.3.10",
+		"@babel/core": "^7.12.16",
+		"@babel/eslint-parser": "^7.12.16",
+		"@babel/plugin-proposal-class-properties": "^7.12.13",
+		"@babel/plugin-proposal-object-rest-spread": "^7.12.13",
+		"@zotero/eslint-config": "^1.0.6",
+		"babel-plugin-transform-es2015-modules-commonjs": "^6.26.2",
+		"eslint": "^7.20.0"
+	}
 }
