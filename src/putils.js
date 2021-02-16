@@ -35,8 +35,8 @@ function intersect(rect1, rect2) {
 	rect2 = Util_normalizeRect(rect2);
 
 	// X: first and second points belong to different rectangles?
-	if ((orderedX[0] === rect1[0] && orderedX[1] === rect2[0]) ||
-		(orderedX[0] === rect2[0] && orderedX[1] === rect1[0])) {
+	if ((orderedX[0] === rect1[0] && orderedX[1] === rect2[0])
+		|| (orderedX[0] === rect2[0] && orderedX[1] === rect1[0])) {
 		// Intersection must be between second and third points
 		result[0] = orderedX[1];
 		result[2] = orderedX[2];
@@ -46,8 +46,8 @@ function intersect(rect1, rect2) {
 	}
 
 	// Y: first and second points belong to different rectangles?
-	if ((orderedY[0] === rect1[1] && orderedY[1] === rect2[1]) ||
-		(orderedY[0] === rect2[1] && orderedY[1] === rect1[1])) {
+	if ((orderedY[0] === rect1[1] && orderedY[1] === rect2[1])
+		|| (orderedY[0] === rect2[1] && orderedY[1] === rect1[1])) {
 		// Intersection must be between second and third points
 		result[1] = orderedY[1];
 		result[3] = orderedY[2];

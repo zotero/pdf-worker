@@ -22,4 +22,4 @@ exports.deleteAnnotations = function (structure, ids) {
 			delete rawPage['/Annots'];
 		}
 	}
-}
+};

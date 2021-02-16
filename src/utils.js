@@ -10,7 +10,7 @@ exports.quadPointsToRects = function (quadPoints) {
 		rects.push([x, y, x + width, y + height]);
 	}
 	return rects;
-}
+};
 
 exports.pdfDateToIso = function (str) {
 	let m = str.match(/([0-9]{4})([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)/);
@@ -28,4 +28,4 @@ exports.pdfDateToIso = function (str) {
 	}
 
 	return (new Date(Date.UTC(...d))).toISOString();
-}
+};

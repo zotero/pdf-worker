@@ -7,7 +7,7 @@ exports.writeRawAnnotations = function (structure, annotations) {
 		}
 		page['/Annots'].push(annotationToRaw(annotation));
 	}
-}
+};
 
 function rectsToQuads(rects) {
 	let quads = [];
@@ -50,7 +50,8 @@ function colorToRaw(hex) {
 
 // D:20190429115637+03'00'
 function dateToRaw(str) {
-	return 'D:' + (new Date(str)).toISOString().slice(0, 19).replace(/[^0-9]/g, '')
+	return 'D:' + (new Date(str)).toISOString().slice(0, 19)
+	.replace(/[^0-9]/g, '');
 }
 
 function annotationToRaw(annotation) {
@@ -88,8 +89,8 @@ function annotationToRaw(annotation) {
 			// 		"gen": 0
 			// 	}
 			// },
-			'num': 0,
-			'gen': 0
+			num: 0,
+			gen: 0
 		};
 	}
 	else if (annotation.type === 'highlight') {
@@ -121,22 +122,22 @@ function annotationToRaw(annotation) {
 								'/BM': '/Multiply',
 								'/CA': 1,
 								'/ca': 1,
-								'num': 0,
-								'gen': 0
+								num: 0,
+								gen: 0
 							},
-							'num': 0,
-							'gen': 0
-						}, 'num': 0, 'gen': 0
+							num: 0,
+							gen: 0
+						}, num: 0, gen: 0
 					},
 					'/Subtype': '/Form',
 					'/Type': '/XObject',
-					'stream': '/G0 gs\r1 0.552941 0 rg\r' + p + 'f\r',
-					'num': 0,
-					'gen': 0
+					stream: '/G0 gs\r1 0.552941 0 rg\r' + p + 'f\r',
+					num: 0,
+					gen: 0
 				}
 			},
-			'num': 0,
-			'gen': 0
+			num: 0,
+			gen: 0
 		};
 	}
 	else if (annotation.type === 'image') {
@@ -166,20 +167,20 @@ function annotationToRaw(annotation) {
 					'/FormType': 1,
 					'/Resources': {
 						'/ExtGState': {
-							'/G0': { '/CA': 1, '/ca': 1, 'num': 0, 'gen': 0 },
-							'num': 0,
-							'gen': 0
-						}, 'num': 0, 'gen': 0
+							'/G0': { '/CA': 1, '/ca': 1, num: 0, gen: 0 },
+							num: 0,
+							gen: 0
+						}, num: 0, gen: 0
 					},
 					'/Subtype': '/Form',
 					'/Type': '/XObject',
-					'stream': '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' RG\r0 0 0 0 k\r2 w\r[] 0 d\r' + p + ' re\rS\r',
-					'num': 0,
-					'gen': 0
+					stream: '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' RG\r0 0 0 0 k\r2 w\r[] 0 d\r' + p + ' re\rS\r',
+					num: 0,
+					gen: 0
 				}
 			},
-			'num': 0,
-			'gen': 0
+			num: 0,
+			gen: 0
 		};
 	}
 }

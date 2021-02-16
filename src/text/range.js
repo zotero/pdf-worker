@@ -7,10 +7,10 @@ function isDash(c) {
 }
 
 function quickIntersectRect(r1, r2) {
-	return !(r2[0] > r1[2] ||
-		r2[2] < r1[0] ||
-		r2[1] > r1[3] ||
-		r2[3] < r1[1]);
+	return !(r2[0] > r1[2]
+		|| r2[2] < r1[0]
+		|| r2[1] > r1[3]
+		|| r2[3] < r1[1]);
 }
 
 // Using non-normalized rect containing selection start and end points
@@ -52,7 +52,7 @@ function getRangeByHighlightRects(chs, rects) {
 	}
 
 	if (startIndex < endIndex) {
-		return { chStart: chs[startIndex], chEnd: chs[endIndex] }
+		return { chStart: chs[startIndex], chEnd: chs[endIndex] };
 	}
 	else {
 		return null;
@@ -60,12 +60,12 @@ function getRangeByHighlightRects(chs, rects) {
 }
 
 function filter(chs) {
-	return chs.filter(ch => {
-		ch.rotation = ch.rotation / 90;
+	return chs.filter((ch) => {
+		ch.rotation /= 90;
 		if (ch.rotation && ch.rotation % 1 !== 0) return false;
 		if (ch.c === ' ') return false;
 		return true;
-	})
+	});
 }
 
 exports.extractRange = function (chs, rects, selection) {
@@ -173,4 +173,4 @@ exports.extractRange = function (chs, rects, selection) {
 		rects: allRects,
 		text
 	};
-}
+};

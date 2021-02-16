@@ -31,7 +31,7 @@ async function getText(page, cmapProvider) {
 			this.called = true;
 			return {
 				value: await cmapProvider(this.data.name)
-			}
+			};
 		}
 	}
 
@@ -235,7 +235,7 @@ async function extractFulltext(buf, password, pagesNum, cmapProvider) {
 	return {
 		text: fulltext,
 		pages: pageIndex
-	}
+	};
 }
 
 async function extractStructure() {
@@ -273,9 +273,7 @@ if (typeof self !== 'undefined') {
 			return;
 		}
 
-		console.log('Worker: Message received from the main script');
-
-		// console.log(e);
+		// console.log('Received message', e.data);
 
 		async function cmapProvider(name) {
 			return query('FetchBuiltInCMap', name);

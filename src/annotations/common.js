@@ -34,4 +34,4 @@ function getRawPageView(rawPage) {
 
 module.exports = {
 	getRawPageView
-}
+};

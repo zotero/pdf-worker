@@ -39,7 +39,7 @@ exports.readRawAnnotations = function (structure) {
 	}
 
 	return annotations;
-}
+};
 
 function resizeAndFitRect(rect, width, height, view) {
 	let point = [rect[0] + (rect[2] - rect[0]) / 2, rect[1] + (rect[3] - rect[1]) / 2];
@@ -100,7 +100,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	annotation.type = type;
 	let str = getStr(rawAnnot['/NM']);
 	if (str.startsWith('Zotero-')) {
-		annotation.id = str.slice(7)
+		annotation.id = str.slice(7);
 	}
 
 	str = getStr(rawAnnot['/ZOTERO:Key']);
@@ -146,4 +146,4 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	annotation.comment = stringToPDFString(getStr(rawAnnot['/Contents']));
 	annotation.color = arrayColorToHex(putils.getColorArray(rawAnnot['/C'] || rawAnnot['/IC']));
 	return annotation;
-}
+};
