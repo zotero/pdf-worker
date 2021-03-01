@@ -1,4 +1,4 @@
-const Util = require('../../pdf.js/build/lib/shared/util');
+const { isArrayEqual, Util } = require('../../pdf.js/build/lib/shared/util');
 
 function getBoundingBox(box) {
 	if (Array.isArray(box) && box.length === 4) {
@@ -20,7 +20,7 @@ function getRawPageView(rawPage) {
 	// effectively reduced to their intersection with the media box."
 
 	let view;
-	if (cropBox === mediaBox || Util.isArrayEqual(cropBox, mediaBox)) {
+	if (cropBox === mediaBox || isArrayEqual(cropBox, mediaBox)) {
 		view = mediaBox;
 	}
 	else {
