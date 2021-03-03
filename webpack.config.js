@@ -3,7 +3,7 @@ const exec = require('child_process').exec;
 
 module.exports = {
 	watch: process.env.NODE_ENV !== 'production',
-	devtool: 'source-map',
+	devtool: false,
 	mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
 	entry: ['./src/index.js'],
 	output: {
