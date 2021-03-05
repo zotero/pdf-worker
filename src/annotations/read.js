@@ -73,6 +73,8 @@ function resizeAndFitRect(rect, width, height, view) {
 	return rect;
 }
 
+exports.resizeAndFitRect = resizeAndFitRect;
+
 exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	let type = rawAnnot['/Subtype'];
 	if (!type) {

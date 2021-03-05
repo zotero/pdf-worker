@@ -6,6 +6,10 @@ const { deleteMatchedAnnotations } = require('./annotations/delete');
 const { extractRange } = require('./text/range');
 const { getClosestOffset } = require('./text/offset');
 const { getPageLabelPoints, getPageLabel } = require('./text/page');
+const { Util } = require('../../pdf.js/build/lib/shared/util');
+const { resizeAndFitRect } = require('./annotations/read');
+
+// TODO: Highlights shouldn't be allowed to be outside of page view
 
 let chsCache = {};
 
@@ -242,6 +246,123 @@ async function extractStructure() {
 
 }
 
+async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cmapProvider) {
+	let pdf = new PDFAssembler();
+	await pdf.init(buf, password);
+	let pdfDocument = pdf.pdfManager.pdfDocument;
+
+	let annotations = [];
+	for (let mendeleyAnnotation of mendeleyAnnotations) {
+		try {
+			let annotation = { position: {} };
+			if (mendeleyAnnotation.id) {
+				annotation.id = mendeleyAnnotation.id;
+			}
+			annotation.position.pageIndex = parseInt(mendeleyAnnotation.page) - 1;
+			let page = await pdfDocument.getPage(annotation.position.pageIndex);
+			if (!page) {
+				continue;
+			}
+			if (mendeleyAnnotation.type === 'note') {
+				let { x, y } = mendeleyAnnotation;
+				const NOTE_SIZE = 22;
+				let rect = resizeAndFitRect([x, y, x, y], NOTE_SIZE, NOTE_SIZE, page.view);
+				annotation.type = 'note';
+				annotation.position.rects = [rect.map(n => Math.round(n * 1000) / 1000)];
+			}
+			else if (mendeleyAnnotation.type === 'highlight') {
+				let rects = mendeleyAnnotation.rects.map(rect => {
+					return Util
+					.normalizeRect([rect.x1, rect.y1, rect.x2, rect.y2])
+					.map(n => Math.round(n * 1000) / 1000);
+				});
+
+				annotation.type = 'highlight';
+
+				if (rects.length === 1) {
+					let rect = rects[0];
+					let width = rect[3] - rect[1];
+					let height = rect[2] - rect[0];
+					let min = Math.min(width, height);
+					let max = Math.max(width, height);
+					if (min > 30 && max / min < 10) {
+						annotation.type = 'image';
+					}
+				}
+				annotation.position.rects = rects;
+			}
+
+			annotations.push(annotation);
+		}
+		catch (e) {
+			console.log(e);
+		}
+	}
+
+	let pageChs;
+	let pageHeight;
+	let loadedPageIndex = null;
+	for (let annotation of annotations) {
+		let pageIndex = annotation.position.pageIndex;
+		if (loadedPageIndex !== pageIndex) {
+			let page = await pdfDocument.getPage(pageIndex);
+			let pageItems = await getText(page, cmapProvider);
+			loadedPageIndex = pageIndex;
+			pageChs = [];
+			for (let item of pageItems) {
+				for (let ch of item.chars) {
+					pageChs.push(ch);
+				}
+			}
+			pageHeight = page.view[3];
+		}
+
+		let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
+		if (points) {
+			annotation.pageLabel = '-';
+			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider);
+			if (pageLabel) {
+				annotation.pageLabel = pageLabel;
+			}
+		}
+		else {
+			let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
+			if (pageLabels && pageLabels[pageIndex]) {
+				annotation.pageLabel = pageLabels[pageIndex];
+			}
+			else {
+				annotation.pageLabel = (pageIndex + 1).toString();
+			}
+		}
+
+		let offset = 0;
+		if (annotation.type === 'highlight') {
+			let range = extractRange(pageChs, annotation.position.rects);
+			if (range) {
+				offset = range.offset;
+				annotation.text = range.text;
+			}
+		}
+		// 'note'
+		else {
+			offset = getClosestOffset(pageChs, annotation.position.rects[0]);
+		}
+
+		let top = pageHeight - annotation.position.rects[0][3];
+		annotation.sortIndex = [
+			annotation.position.pageIndex.toString().slice(0, 5).padStart(5, '0'),
+			offset.toString().slice(0, 6).padStart(6, '0'),
+			parseInt(top).toString().slice(0, 5).padStart(5, '0')
+		].join('|');
+
+		if (annotation.type === 'highlight' && !annotation.text) {
+			annotation.type = 'image';
+			delete annotation.text;
+		}
+	}
+	return annotations;
+}
+
 function errObject(err) {
 	return JSON.parse(JSON.stringify(err, Object.getOwnPropertyNames(err)));
 }
@@ -312,6 +433,21 @@ if (typeof self !== 'undefined') {
 				}, []);
 			}
 		}
+		else if (message.action === 'importMendeley') {
+			try {
+				let annotations = await importMendeleyAnnotations(message.data.buf, message.data.mendeleyAnnotations, message.data.password, cmapProvider);
+				self.postMessage({
+					responseID: message.id,
+					data: annotations
+				}, []);
+			}
+			catch (e) {
+				self.postMessage({
+					responseID: message.id,
+					error: errObject(e)
+				}, []);
+			}
+		}
 		else if (message.action === 'extractFulltext') {
 			let res;
 			try {
@@ -346,5 +482,6 @@ module.exports = {
 	readAnnotations,
 	extractFulltext,
 	extractStructure,
-	extractInfo
+	extractInfo,
+	importMendeleyAnnotations
 };
