@@ -276,6 +276,8 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 					.normalizeRect([rect.x1, rect.y1, rect.x2, rect.y2])
 					.map(n => Math.round(n * 1000) / 1000);
 				});
+				// Sort rects from page top to bottom, left to right
+				rects.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
 
 				annotation.type = 'highlight';
 
@@ -355,7 +357,12 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 			parseInt(top).toString().slice(0, 5).padStart(5, '0')
 		].join('|');
 
-		if (annotation.type === 'highlight' && !annotation.text) {
+		if (annotation.position.rects.length === 1
+			&& annotation.type === 'highlight'
+			// TODO: Consider to remove this minimal height check when range
+			//  extraction precision is increased
+			&& annotation.position.rects[0][2] - annotation.position.rects[0][0] > 20
+			&& !annotation.text) {
 			annotation.type = 'image';
 			delete annotation.text;
 		}

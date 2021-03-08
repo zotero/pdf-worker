@@ -83,6 +83,30 @@ describe('PDF Worker', function () {
 			},
 			{
 				type: 'highlight',
+				page: 1,
+				rects: [
+					{
+						x1: 108.094,
+						y1: 257.801,
+						x2: 295.598,
+						y2: 269.051
+					},
+					{
+						x1: 108.094,
+						y1: 270.258,
+						x2: 503.574,
+						y2: 280.758
+					},
+					{
+						x1: 108.094,
+						y1: 281.859,
+						x2: 503.705,
+						y2: 292.359
+					}
+				]
+			},
+			{
+				type: 'highlight',
 				page: 2,
 				rects: [
 					{
@@ -128,6 +152,18 @@ describe('PDF Worker', function () {
 						y2: 384.41279296875
 					}
 				]
+			},
+			{
+				type: 'highlight',
+				page: 2,
+				rects: [
+					{
+						x1: 298.0,
+						y1: 594.22685546875,
+						x2: 302.66004196,
+						y2: 600.7107421875
+					}
+				]
 			}
 		];
 		let annotations = await pdfWorker.importMendeleyAnnotations(buf, mendeleyAnnotations);
@@ -138,6 +174,15 @@ describe('PDF Worker', function () {
 				pageIndex: 1,
 				rects: [[435.04, 646.972, 457.04, 668.972]]
 			}, type: 'note', pageLabel: '2', sortIndex: '00001|000195|00123'
+		}, {
+			position: {
+				pageIndex: 0,
+				rects: [[108.094, 281.859, 503.705, 292.359], [108.094, 270.258, 503.574, 280.758], [108.094, 257.801, 295.598, 269.051]]
+			},
+			type: 'highlight',
+			pageLabel: '1',
+			text: 'be wary of their customers, hassling them for more information than they would otherwise need. A certain percentage of fraud is accepted as unavoidable. These costs and payment uncertainties can be avoided in person by using physical cu',
+			sortIndex: '00000|001702|00499'
 		}, {
 			position: {
 				pageIndex: 1,
@@ -158,6 +203,21 @@ describe('PDF Worker', function () {
 			pageLabel: '2',
 			text: 'For our purposes, the earliest transaction is the one that counts, so we don\'t care ',
 			sortIndex: '00001|000817|00407'
+		}, {
+			pageLabel: '2',
+			position: {
+				pageIndex: 1,
+				rects: [
+					[
+						298,
+						594.227,
+						302.66,
+						600.711
+					]
+				]
+			},
+			sortIndex: '00001|000000|00191',
+			type: 'highlight'
 		}];
 
 		expect(annotations).to.deep.equal(result);
