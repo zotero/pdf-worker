@@ -137,6 +137,8 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	}
 
 	rects = rects.map(r => r.map(n => Math.round(n * 1000) / 1000));
+	// Sort rects from page top to bottom, left to right
+	rects.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
 
 	annotation.position = {
 		pageIndex,
