@@ -6,7 +6,7 @@ const { deleteMatchedAnnotations } = require('./annotations/delete');
 const { extractRange } = require('./text/range');
 const { getClosestOffset } = require('./text/offset');
 const { getPageLabelPoints, getPageLabel } = require('./text/page');
-const { Util } = require('../../pdf.js/build/lib/shared/util');
+const { Util } = require('../pdf.js/build/lib/shared/util');
 const { resizeAndFitRect } = require('./annotations/read');
 
 // TODO: Highlights shouldn't be allowed to be outside of page view
