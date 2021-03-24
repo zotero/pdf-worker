@@ -8,7 +8,7 @@ module.exports = {
 	entry: ['./src/index.js'],
 	output: {
 		path: path.join(__dirname, './build'),
-		filename: 'pdf-worker.js',
+		filename: 'worker.js',
 		publicPath: '/',
 		libraryTarget: 'umd',
 		library: 'pdf-worker',
