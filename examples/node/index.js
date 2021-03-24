@@ -27,6 +27,7 @@ async function main() {
       pageIndex: 0,
       rects: [[100, 100, 120, 120]]
     },
+    color: '#FF0000',
     comment: 'A test note',
     authorName: 'John',
     dateModified: '2019-04-19T08:21:13.011Z'

@@ -1,3 +1,5 @@
+const NOTE_SIZE = 22;
+
 exports.writeRawAnnotations = function (structure, annotations) {
 	for (let annotation of annotations) {
 		let pageIndex = annotation.position.pageIndex;
@@ -75,20 +77,29 @@ function annotationToRaw(annotation) {
 			'/Contents': '(' + stringToRaw(annotation.comment) + ')',
 			'/NM': '(' + 'Zotero-' + annotation.id + ')',
 			'/F': 4,
-			'/C': colorToRaw(annotation.color) || [1, 1, 0],
+			'/C': colorToRaw(annotation.color),
 			'/CA': 1,
 			'/Border': [0, 0, 1],
-			// "/AP": {
-			// 	"/N": {
-			// 		"/BBox": [0, 0, 20, 20],
-			// 		"/FormType": 1,
-			// 		"/Subtype": "/Form",
-			// 		"/Type": "/XObject",
-			// 		"stream": "1 1 0 rg 0 G 0 i 0.60 w 4 M 1 j 0 J []0 d 19.62 7.52 m 19.62 5.72 18.12 4.26 16.28 4.26 c 9.07 4.25 l 4.93 0.32 l 6.03 4.26 l 3.70 4.26 l 1.86 4.26 0.36 5.72 0.36 7.52 c 0.36 14.37 l 0.36 16.17 1.86 17.63 3.70 17.63 c 16.28 17.63 l 18.12 17.63 19.62 16.17 19.62 14.37 c 19.62 7.52 l h B 0 g 3.87 14.41 m 3.70 14.41 3.57 14.28 3.57 14.11 c 3.57 13.95 3.70 13.81 3.87 13.81 c 16.10 13.81 l 16.27 13.81 16.41 13.95 16.41 14.11 c 16.41 14.28 16.27 14.41 16.10 14.41 c 3.87 14.41 l h f 3.87 11.23 m 3.70 11.23 3.57 11.10 3.57 10.93 c 3.57 10.76 3.70 10.63 3.87 10.63 c 16.10 10.63 l 16.27 10.63 16.41 10.76 16.41 10.93 c 16.41 11.10 16.27 11.23 16.10 11.23 c 3.87 11.23 l h f 3.87 8.05 m 3.70 8.05 3.57 7.91 3.57 7.75 c 3.57 7.58 3.70 7.45 3.87 7.45 c 12.84 7.45 l 13.01 7.45 13.15 7.58 13.15 7.75 c 13.15 7.91 13.01 8.05 12.84 8.05 c 3.87 8.05 l h f ",
-			// 		"num": 0,
-			// 		"gen": 0
-			// 	}
-			// },
+			'/AP': {
+				'/N': {
+					'/BBox': [0, 0, NOTE_SIZE, NOTE_SIZE],
+					'/FormType': 1,
+					'/Subtype': '/Form',
+					'/Type': '/XObject',
+					'stream': colorToRaw(annotation.color).join(' ') + ' rg\n' +
+						'21.457 0.488 m 21.457 21.457 l 0.457 21.457 l 0.457 10.516 l 10.5 0.488\n' +
+						' l h\n' +
+						'21.457 0.488 m f\n' +
+						'0 0 0 rg\n' +
+						'21.914 0.031 m 10.312 0.031 l 0 10.328 l 0 21.91 l 21.914 21.91 l h\n' +
+						'1.559 10.059 m 10.043 1.59 l 10.043 10.059 l h\n' +
+						'0.914 21 m 0.914 10.973 l 10.957 10.973 l 10.957 0.945 l 21 0.945 l 21 \n' +
+						'21 l h\n' +
+						'0.914 21 m f',
+					'num': 0,
+					'gen': 0
+				}
+			},
 			num: 0,
 			gen: 0
 		};
@@ -111,7 +122,7 @@ function annotationToRaw(annotation) {
 			'/T': '(' + stringToRaw(annotation.authorName) + ')',
 			'/Contents': '(' + stringToRaw(annotation.comment) + ')',
 			'/NM': '(' + 'Zotero-' + annotation.id + ')',
-			'/C': colorToRaw(annotation.color) || [1, 1, 0],
+			'/C': colorToRaw(annotation.color),
 			'/AP': {
 				'/N': {
 					'/BBox': containerRect,
@@ -131,7 +142,7 @@ function annotationToRaw(annotation) {
 					},
 					'/Subtype': '/Form',
 					'/Type': '/XObject',
-					stream: '/G0 gs\r1 0.552941 0 rg\r' + p + 'f\r',
+					stream: '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' rg\r' + p + 'f\r',
 					num: 0,
 					gen: 0
 				}
