@@ -11,8 +11,6 @@ const { resizeAndFitRect } = require('./annotations/read');
 
 // TODO: Highlights shouldn't be allowed to be outside of page view
 
-let chsCache = {};
-
 async function getText(page, cmapProvider) {
 	let handler = {};
 	handler.send = function (z, b) {
@@ -73,7 +71,12 @@ async function getText(page, cmapProvider) {
 }
 
 async function getPageChs(pageIndex, pdfDocument, cmapProvider) {
-	if (chsCache[pageIndex]) return chsCache[pageIndex];
+	if (!pdfDocument.chsCache) {
+		pdfDocument.chsCache = {};
+	}
+	if (pdfDocument.chsCache[pageIndex]) {
+		return pdfDocument.chsCache[pageIndex];
+	}
 
 	let page = await pdfDocument.getPage(pageIndex);
 	let pageItems = await getText(page, cmapProvider);
@@ -85,7 +88,7 @@ async function getPageChs(pageIndex, pdfDocument, cmapProvider) {
 		}
 	}
 
-	chsCache[pageIndex] = chs;
+	pdfDocument.chsCache[pageIndex] = chs;
 	return chs;
 }
 
