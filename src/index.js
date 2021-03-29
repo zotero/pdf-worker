@@ -177,13 +177,14 @@ async function readAnnotations(buf, existingAnnotations, password, cmapProvider)
 
 		let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
 		if (points) {
-			annotation.pageLabel = '-';
+			// annotation.pageLabel = '-';
 			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider);
 			if (pageLabel) {
 				annotation.pageLabel = pageLabel;
 			}
 		}
-		else {
+
+		if (!annotation.pageLabel) {
 			let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
 			if (pageLabels && pageLabels[pageIndex]) {
 				annotation.pageLabel = pageLabels[pageIndex];
@@ -321,13 +322,15 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 
 		let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
 		if (points) {
-			annotation.pageLabel = '-';
+			// annotation.pageLabel = '-';
+			// TODO: Improve extractPageLabel
 			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider);
 			if (pageLabel) {
 				annotation.pageLabel = pageLabel;
 			}
 		}
-		else {
+
+		if (!annotation.pageLabel) {
 			let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
 			if (pageLabels && pageLabels[pageIndex]) {
 				annotation.pageLabel = pageLabels[pageIndex];
