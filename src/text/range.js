@@ -168,6 +168,8 @@ exports.extractRange = function (chs, rects, selection) {
 		}
 	}
 
+	text = text.trim();
+
 	return {
 		offset: chs.indexOf(chStart),
 		rects: allRects,
