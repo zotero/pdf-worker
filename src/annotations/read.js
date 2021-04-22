@@ -148,6 +148,16 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	annotation.dateModified = utils.pdfDateToIso(getStr(rawAnnot['/M']));
 	// annotation.authorName = stringToPDFString(getStr(rawAnnot['/T']));
 	annotation.comment = stringToPDFString(getStr(rawAnnot['/Contents']));
-	annotation.color = arrayColorToHex(putils.getColorArray(rawAnnot['/C'] || rawAnnot['/IC']));
+
+	let colorArray = putils.getColorArray(rawAnnot['/C'] || rawAnnot['/IC']);
+	let alpha = rawAnnot['/CA'];
+	if (colorArray && alpha === parseFloat(alpha)) {
+		// Make sure we aren't producing invisible annotations
+		if (alpha < 0.1) {
+			alpha = 0.1;
+		}
+		colorArray = colorArray.map(c => alpha * c + (1 - alpha) * 255);
+	}
+	annotation.color = arrayColorToHex(colorArray);
 	return annotation;
 };

@@ -64,7 +64,7 @@ describe('PDF Worker', function () {
 				comment: 'Comment 2',
 				color: '#589fee',
 				pageLabel: '1',
-				text: 'Dynamic languages such as JavaScript, Python, and Ruby, are popular ',
+				text: 'Dynamic languages such as JavaScript, Python, and Ruby, are popular',
 				sortIndex: '00000|001536|00584'
 			}, {
 				type: 'highlight',
@@ -108,7 +108,7 @@ describe('PDF Worker', function () {
 				comment: 'A problem of nested loops',
 				color: '#6cc055',
 				pageLabel: '2',
-				text: 'Nested loops can be difficult to optimize for tracing VMs. In a na ̈ıve implementation, inner loops would become hot first, and the VM would start tracing there. ',
+				text: 'Nested loops can be difficult to optimize for tracing VMs. In a na ̈ıve implementation, inner loops would become hot first, and the VM would start tracing there.',
 				sortIndex: '00001|000459|00163'
 			}, {
 				type: 'highlight',
@@ -117,7 +117,7 @@ describe('PDF Worker', function () {
 				comment: '',
 				color: '#f8c348',
 				pageLabel: '2',
-				text: 'The system stops extending the inner tree when it reaches an outer loop, but then it starts a new trace at the outer loop header. ',
+				text: 'The system stops extending the inner tree when it reaches an outer loop, but then it starts a new trace at the outer loop header.',
 				sortIndex: '00001|001247|00312'
 			}, {
 				type: 'highlight',
@@ -149,7 +149,7 @@ describe('PDF Worker', function () {
 				comment: '',
 				color: '#f8c348',
 				pageLabel: '2',
-				text: 'TraceMonkey always begins executing a program in the bytecode interpreter. ',
+				text: 'TraceMonkey always begins executing a program in the bytecode interpreter.',
 				sortIndex: '00001|004682|00607'
 			}, {
 				type: 'highlight',
@@ -322,7 +322,7 @@ describe('PDF Worker', function () {
 			},
 			type: 'highlight',
 			pageLabel: '2',
-			text: 'For our purposes, the earliest transaction is the one that counts, so we don\'t care about later attempts to double-spend. The only way to confirm the absence of a transaction is to be aware of all transactions. In the mint based model, the mint was aware of all transactions and ',
+			text: 'For our purposes, the earliest transaction is the one that counts, so we don\'t care about later attempts to double-spend. The only way to confirm the absence of a transaction is to be aware of all transactions. In the mint based model, the mint was aware of all transactions and',
 			sortIndex: '00001|000817|00407'
 		}, {
 			position: { pageIndex: 1, rects: [[171.996, 475.074, 443.626, 641.07]] },
@@ -333,7 +333,7 @@ describe('PDF Worker', function () {
 			position: { pageIndex: 1, rects: [[166.205, 375.24, 503.828, 384.413]] },
 			type: 'highlight',
 			pageLabel: '2',
-			text: 'For our purposes, the earliest transaction is the one that counts, so we don\'t care ',
+			text: 'For our purposes, the earliest transaction is the one that counts, so we don\'t care',
 			sortIndex: '00001|000817|00407'
 		}, {
 			pageLabel: '2',
