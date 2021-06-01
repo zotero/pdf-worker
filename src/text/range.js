@@ -34,28 +34,32 @@ function getCenterRect(r) {
 
 function getRangeByHighlightRects(chs, rects) {
 	let startIndex = Infinity;
+	outer:
 	for (let i = 0; i < chs.length; i++) {
 		let ch = chs[i];
-		if (quickIntersectRect(getCenterRect(ch.rect), rects[0])) {
-			startIndex = i;
-			break;
+		for (let rect of rects) {
+			if (quickIntersectRect(getCenterRect(ch.rect), rect)) {
+				startIndex = i;
+				break outer;
+			}
 		}
 	}
 
 	let endIndex = 0;
+	outer:
 	for (let i = chs.length - 1; i >= 0; i--) {
 		let ch = chs[i];
-		if (quickIntersectRect(getCenterRect(ch.rect), rects[rects.length - 1])) {
-			endIndex = i;
-			break;
+		for (let j = rects.length - 1; j >= 0; j--) {
+			let rect = rects[j];
+			if (quickIntersectRect(getCenterRect(ch.rect), rect)) {
+				endIndex = i;
+				break outer;
+			}
 		}
 	}
 
 	if (startIndex < endIndex) {
 		return { chStart: chs[startIndex], chEnd: chs[endIndex] };
-	}
-	else {
-		return null;
 	}
 }
 
