@@ -211,10 +211,14 @@ async function readAnnotations(buf, existingAnnotations, password, cmapProvider)
 		}
 
 		let top = pageHeight - annotation.position.rects[0][3];
+		if (top < 0) {
+			top = 0;
+		}
+
 		annotation.sortIndex = [
 			annotation.position.pageIndex.toString().slice(0, 5).padStart(5, '0'),
 			offset.toString().slice(0, 6).padStart(6, '0'),
-			parseInt(top).toString().slice(0, 5).padStart(5, '0')
+			Math.floor(top).toString().slice(0, 5).padStart(5, '0')
 		].join('|');
 	}
 	return { imported, deleted };
@@ -357,10 +361,14 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 		}
 
 		let top = pageHeight - annotation.position.rects[0][3];
+		if (top < 0) {
+			top = 0;
+		}
+
 		annotation.sortIndex = [
 			annotation.position.pageIndex.toString().slice(0, 5).padStart(5, '0'),
 			offset.toString().slice(0, 6).padStart(6, '0'),
-			parseInt(top).toString().slice(0, 5).padStart(5, '0')
+			Math.floor(top).toString().slice(0, 5).padStart(5, '0')
 		].join('|');
 
 		if (annotation.position.rects.length === 1
