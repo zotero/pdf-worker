@@ -7,7 +7,11 @@ exports.writeRawAnnotations = function (structure, annotations) {
 		if (!page['/Annots']) {
 			page['/Annots'] = [];
 		}
-		page['/Annots'].push(annotationToRaw(annotation));
+		let rawAnnotation = annotationToRaw(annotation);
+		page['/Annots'].push(rawAnnotation);
+		if (annotation.type === 'highlight' && annotation.comment) {
+			page['/Annots'].push(addPopup(rawAnnotation));
+		}
 	}
 };
 
@@ -194,4 +198,18 @@ function annotationToRaw(annotation) {
 			gen: 0
 		};
 	}
+}
+
+function addPopup(annotation) {
+	let popup = {
+		'/Type': '/Annot',
+		'/Subtype': '/Popup',
+		'/Parent': annotation,
+		'/Rect': annotation['/Rect'],
+		num: 0,
+		gen: 0
+	};
+
+	annotation['/Popup'] = popup;
+	return popup;
 }
