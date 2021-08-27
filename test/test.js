@@ -171,8 +171,9 @@ describe('PDF Worker', function () {
 
 	it('should write annotations', async function () {
 		let annotations = [{
+			'id': 'AAAABBBB',
 			'type': 'highlight',
-			'color': '#589fee',
+			'color': '#f8c348',
 			'position': {
 				'pageIndex': 0,
 				'rects': [
@@ -183,17 +184,25 @@ describe('PDF Worker', function () {
 					[54, 362.276, 273.955, 370.292]
 				]
 			},
-			'authorName': '',
+			'authorName': 'John',
 			'text': 'We present an alternative compilation technique for dynamically-typed languages that identifies frequently executed loop traces at run-time and then generates machine code on the fly that is specialized for the actual dynamic types occurring on each path through the loop',
 			'comment': 'Sounds promising',
-			'tags': [],
-			'id': 91115751444169,
-			'dateModified': '2020-02-07T07:24:34.638Z',
-			'dateCreated': '2020-02-03T11:07:16.181Z',
-			'userId': 123,
-			'label': 'john',
-			'page': 1,
-			'sortIndex': '000000|0000779|000381.858'
+			'dateModified': '2020-02-07T07:24:34.638Z'
+		},
+		{
+			'id': 'BBBBCCCC',
+			'type': 'ink',
+			'color': '#589fee',
+			'position': {
+				'pageIndex': 0,
+				'width': 2.4774284,
+				'paths': [
+					[78.4, 657.59996, 84.8, 664, 90.4, 670.40004, 97.6, 676.8, 104, 682.4, 110.4, 689.6, 112, 679.2, 112, 669.59996, 112, 661.59996, 112, 652.8, 112, 644, 110.4, 636, 108, 627.2, 106.4, 616.8, 106.4, 605.59996, 105.6, 597.59996, 104.8, 589.59996, 104, 581.59996, 104, 573.59996],
+					[176.8, 659.2, 176, 667.2, 180, 675.2, 188, 678.4, 196, 680.8, 204, 682.4, 212.8, 682.4, 218.4, 675.2, 218.4, 666.40004, 218.4, 657.59996, 218.4, 648.8, 210.4, 641.59996, 203.2, 637.59996, 195.2, 631.2, 189.6, 624.8, 184, 617.59996, 180.8, 608.8, 180, 600.8, 179.2, 592.8, 176, 584, 182.4, 578.40004, 191.2, 578.40004, 200, 578.40004, 208.8, 577.59996, 218.4, 577.59996, 228, 577.59996, 232.8, 577.59996]
+				]
+			},
+			'authorName': 'John',
+			'dateModified': '2021-08-20T07:24:34.638Z'
 		}];
 
 		let buf = fs.readFileSync(__dirname + '/pdfs/1.pdf');

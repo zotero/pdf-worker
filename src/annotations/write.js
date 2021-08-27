@@ -62,13 +62,32 @@ function dateToRaw(str) {
 
 function annotationToRaw(annotation) {
 	annotation = JSON.parse(JSON.stringify(annotation));
-	annotation.position.rects = annotation.position.rects.map(r => r.map(n => Math.round(n * 1000) / 1000));
-	let containerRect = annotation.position.rects[0].slice();
-	for (let rect of annotation.position.rects) {
-		containerRect[0] = Math.min(containerRect[0], rect[0]);
-		containerRect[1] = Math.min(containerRect[1], rect[1]);
-		containerRect[2] = Math.max(containerRect[2], rect[2]);
-		containerRect[3] = Math.max(containerRect[3], rect[3]);
+	let containerRect;
+	if (annotation.position.rects) {
+		annotation.position.rects = annotation.position.rects.map(r => r.map(n => Math.round(n * 1000) / 1000));
+		containerRect = annotation.position.rects[0].slice();
+		for (let rect of annotation.position.rects) {
+			containerRect[0] = Math.min(containerRect[0], rect[0]);
+			containerRect[1] = Math.min(containerRect[1], rect[1]);
+			containerRect[2] = Math.max(containerRect[2], rect[2]);
+			containerRect[3] = Math.max(containerRect[3], rect[3]);
+		}
+	}
+	else if (annotation.position.paths) {
+		annotation.position.paths = annotation.position.paths.map(r => r.map(n => Math.round(n * 1000) / 1000));
+		let x = annotation.position.paths[0][0];
+		let y = annotation.position.paths[0][1];
+		containerRect = [x, y, x, y];
+		for (let path of annotation.position.paths) {
+			for (let i = 0; i < path.length - 1; i += 2) {
+				let x = path[i];
+				let y = path[i + 1];
+				containerRect[0] = Math.min(containerRect[0], x);
+				containerRect[1] = Math.min(containerRect[1], y);
+				containerRect[2] = Math.max(containerRect[2], x);
+				containerRect[3] = Math.max(containerRect[3], y);
+			}
+		}
 	}
 
 	if (annotation.type === 'note') {
@@ -190,6 +209,68 @@ function annotationToRaw(annotation) {
 					'/Subtype': '/Form',
 					'/Type': '/XObject',
 					stream: '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' RG\r0 0 0 0 k\r2 w\r[] 0 d\r' + p + ' re\rS\r',
+					num: 0,
+					gen: 0
+				}
+			},
+			num: 0,
+			gen: 0
+		};
+	}
+	else if (annotation.type === 'ink') {
+		let p = '';
+		for (let path of annotation.position.paths) {
+			for (let i = 0; i < path.length - 1; i += 2) {
+				let x = path[i];
+				let y = path[i + 1];
+
+				if (i === 0) {
+					p += `${x} ${y} m\r`;
+				}
+				else {
+					p += `${x} ${y} l\r`;
+				}
+			}
+			// p += `h\r`;
+		}
+
+		return {
+			'/Type': '/Annot',
+			'/Subtype': '/Ink',
+			'/Rect': containerRect,
+			'/BS': {
+				'/S': '/N',
+				'/Type': '/Border',
+				'/W': annotation.position.width
+			},
+			'/F': 4,
+			'/InkList': annotation.position.paths,
+			'/C': colorToRaw(annotation.color),
+			'/CA': 1,
+			'/M': '(' + dateToRaw(annotation.dateModified) + ')',
+			'/T': '(' + stringToRaw(annotation.authorName) + ')',
+			'/NM': '(' + 'Zotero-' + annotation.id + ')',
+			'/Zotero:Key': '(' + annotation.id + ')',
+			'/AP': {
+				'/N': {
+					'/BBox': containerRect,
+					'/FormType': 1,
+					'/Resources': {
+						'/ExtGState': {
+							'/G0': {
+								'/BM': '/Multiply',
+								'/CA': 1,
+								'/ca': 1,
+								num: 0,
+								gen: 0
+							},
+							num: 0,
+							gen: 0
+						}, num: 0, gen: 0
+					},
+					'/Subtype': '/Form',
+					'/Type': '/XObject',
+					stream: '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' RG\r' + annotation.position.width + ' w\n' + p + 'S\r',
 					num: 0,
 					gen: 0
 				}
