@@ -136,7 +136,7 @@ function annotationToRaw(annotation) {
 			p += rect[0] + ' ' + rect[3] + ' l\rh\r';
 		}
 
-		return {
+		let res = {
 			'/Type': '/Annot',
 			'/Rect': containerRect,
 			'/Subtype': '/Highlight',
@@ -173,6 +173,11 @@ function annotationToRaw(annotation) {
 			num: 0,
 			gen: 0
 		};
+
+		if (!annotation.comment) {
+			delete res['/Contents'];
+		}
+		return res;
 	}
 	else if (annotation.type === 'image') {
 		let p = [
