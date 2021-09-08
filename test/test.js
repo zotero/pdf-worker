@@ -31,9 +31,9 @@ const crypto = require('crypto');
 const pdfWorker = require('../src');
 
 describe('PDF Worker', function () {
-	it('should extract annotations', async function () {
+	it('should import annotations', async function () {
 		let buf = fs.readFileSync(__dirname + '/pdfs/1.pdf');
-		let result = await pdfWorker.readAnnotations(buf, []);
+		let result = await pdfWorker.importAnnotations(buf, []);
 
 		let expectedResult = {
 			imported: [{
@@ -210,6 +210,7 @@ describe('PDF Worker', function () {
 		var buffer = Buffer.from(buf);
 		let md5 = crypto.createHash('md5').update(buffer).digest('hex');
 		// console.log(md5);
+		// fs.writeFileSync(__dirname + '/1-out.pdf', buffer);
 	});
 
 	it('should import Mendeley annotations', async function () {

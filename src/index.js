@@ -2,7 +2,7 @@ const PDFAssembler = require('./pdfassembler');
 const { getInfo } = require('./pdfinfo');
 const { readRawAnnotations } = require('./annotations/read');
 const { writeRawAnnotations } = require('./annotations/write');
-const { deleteMatchedAnnotations } = require('./annotations/delete');
+const { deleteAnnotations } = require('./annotations/delete');
 const { extractRange } = require('./text/range');
 const { getClosestOffset } = require('./text/offset');
 const { getPageLabelPoints, getPageLabel } = require('./text/page');
@@ -148,12 +148,16 @@ function getDeleted(current, existing) {
 	return existing.filter(a => !current.some(b => duplicated(a, b))).map(a => a.id);
 }
 
-async function readAnnotations(buf, existingAnnotations, password, cmapProvider) {
+async function importAnnotations(buf, existingAnnotations, password, transfer, cmapProvider) {
 	let pdf = new PDFAssembler();
 	await pdf.init(buf, password);
 	let pdfDocument = pdf.pdfManager.pdfDocument;
 	let structure = await pdf.getPDFStructure();
 	let annotations = await readRawAnnotations(structure, pdfDocument);
+
+	if (transfer) {
+		deleteAnnotations(structure);
+	}
 
 	annotations = deduplicate(annotations);
 
@@ -221,6 +225,12 @@ async function readAnnotations(buf, existingAnnotations, password, cmapProvider)
 			Math.floor(top).toString().slice(0, 5).padStart(5, '0')
 		].join('|');
 	}
+
+	if (transfer) {
+		buf = await pdf.assemblePdf('ArrayBuffer');
+		return { imported, deleted, buf };
+	}
+
 	return { imported, deleted };
 }
 
@@ -436,16 +446,10 @@ if (typeof self !== 'undefined') {
 			}
 		}
 		else if (message.action === 'import') {
-			let annotations;
 			try {
-				let {
-					imported,
-					deleted
-				} = await readAnnotations(message.data.buf, message.data.existingAnnotations, message.data.password, cmapProvider);
-				self.postMessage({
-					responseID: message.id,
-					data: { imported, deleted }
-				}, []);
+				let { buf, existingAnnotations, password, transfer } = message.data;
+				let data = await importAnnotations(buf, existingAnnotations, password, transfer, cmapProvider);
+				self.postMessage({ responseID: message.id, data }, data.buf ? [data.buf] : []);
 			}
 			catch (e) {
 				self.postMessage({
@@ -500,7 +504,7 @@ if (typeof self !== 'undefined') {
 
 module.exports = {
 	writeAnnotations,
-	readAnnotations,
+	importAnnotations,
 	extractFulltext,
 	extractStructure,
 	extractInfo,
