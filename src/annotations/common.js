@@ -32,6 +32,44 @@ function getRawPageView(rawPage) {
 	return view || mediaBox;
 }
 
+/**
+ * Convert a raw PDF string or return an empty string
+ *
+ * @param value
+ * @returns {string}
+ */
+function getString(value) {
+	return typeof value === 'string' ? value.slice(1, -1) : '';
+}
+
+function isValidNumber(value) {
+	return typeof value === 'number' && !isNaN(value);
+}
+
+function getAnnotationID(rawAnnot) {
+	let str = getString(rawAnnot['/Zotero:Key']);
+	if (str) {
+		return str;
+	}
+
+	str = getString(rawAnnot['/NM']);
+	if (str.startsWith('Zotero-')) {
+		return str.slice(7);
+	}
+
+	return null;
+}
+
+function isTransferable(rawAnnot) {
+	let id = getAnnotationID(rawAnnot);
+	return !!(['/Text', '/Highlight'].includes(rawAnnot['/Subtype'])
+		|| ['/Square', '/Ink'].includes(rawAnnot['/Subtype']) && id);
+}
+
 module.exports = {
-	getRawPageView
+	getRawPageView,
+	getString,
+	isValidNumber,
+	getAnnotationID,
+	isTransferable
 };

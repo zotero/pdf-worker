@@ -154,15 +154,16 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 	let pdfDocument = pdf.pdfManager.pdfDocument;
 	let structure = await pdf.getPDFStructure();
 	let annotations = await readRawAnnotations(structure, pdfDocument);
+	let modified = false;
 
 	if (transfer) {
-		deleteAnnotations(structure);
+		modified = deleteAnnotations(structure);
 	}
 
 	annotations = deduplicate(annotations);
 
-	let imported = getImported(annotations, existingAnnotations);
-	let deleted = getDeleted(annotations, existingAnnotations);
+	let imported = transfer ? annotations : getImported(annotations, existingAnnotations);
+	let deleted = transfer ? existingAnnotations.map(x => x.id) : getDeleted(annotations, existingAnnotations);
 
 	let pageChs;
 	let pageHeight;
@@ -209,12 +210,25 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 				annotation.text = range.text;
 			}
 		}
-		// 'note'
-		else {
+		else if (['note', 'image'].includes(annotation.type)) {
 			offset = getClosestOffset(pageChs, annotation.position.rects[0]);
 		}
+		// Ink
+		else {
 
-		let top = pageHeight - annotation.position.rects[0][3];
+		}
+
+		let top = 0;
+		if (['highlight', 'note', 'image'].includes(annotation.type)) {
+			top = pageHeight - annotation.position.rects[0][3];
+		}
+		// Ink
+		else {
+			// Flatten path arrays and sort
+			let maxY = [].concat.apply([], annotation.position.paths).filter((x, i) => i % 2 === 1).sort()[0];
+			top = pageHeight - maxY;
+		}
+
 		if (top < 0) {
 			top = 0;
 		}
@@ -226,7 +240,7 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 		].join('|');
 	}
 
-	if (transfer) {
+	if (transfer && modified) {
 		buf = await pdf.assemblePdf('ArrayBuffer');
 		return { imported, deleted, buf };
 	}

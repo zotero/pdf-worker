@@ -1,25 +1,13 @@
 const { stringToPDFString } = require('../../pdf.js/build/lib/shared/util');
 const { arrayColorToHex } = require('../color');
-const { getRawPageView } = require('./common');
+const { getRawPageView, getString, isValidNumber, getAnnotationID, isTransferable } = require('./common');
 
 const utils = require('../utils');
 const putils = require('../putils');
 
 const NOTE_SIZE = 22;
 
-/**
- * Convert a raw PDF string or return an empty string
- *
- * @param value
- * @returns {string}
- */
-function getStr(value) {
-	return typeof value === 'string' ? value.slice(1, -1) : '';
-}
 
-function isValidNumber(value) {
-	return typeof value === 'number' && !isNaN(value);
-}
 
 exports.readRawAnnotations = function (structure) {
 	let annotations = [];
@@ -81,17 +69,15 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 		return null;
 	}
 	type = type.slice(1);
-	if (!['Text', 'Highlight', 'Underline', 'Square'].includes(type)) {
+	if (!['Text', 'Highlight', 'Underline', 'Square', 'Ink'].includes(type)) {
 		return null;
 	}
 
-	if (type === 'Underline') {
-		type = 'Highlight';
-	}
-
 	type = type.toLowerCase();
-
-	if (type === 'text') {
+	if (type === 'underline') {
+		type = 'highlight';
+	}
+	else if (type === 'text') {
 		type = 'note';
 	}
 	else if (type === 'square') {
@@ -100,54 +86,75 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 
 	let annotation = {};
 	annotation.type = type;
-	let str = getStr(rawAnnot['/NM']);
-	if (str.startsWith('Zotero-')) {
-		annotation.id = str.slice(7);
-	}
 
-	str = getStr(rawAnnot['/Zotero:Key']);
-	if (str) {
-		annotation.id = str;
+	let id = getAnnotationID(rawAnnot);
+	if (id) {
+		annotation.id = getAnnotationID(rawAnnot);
 	}
 
 	if (type === 'image' && !annotation.id) {
 		return null;
 	}
 
-	let rects;
-	if (Array.isArray(rawAnnot['/QuadPoints'])
-		&& rawAnnot['/QuadPoints'].length % 8 === 0
-		&& rawAnnot['/QuadPoints'].every(x => isValidNumber(x))) {
-		rects = utils.quadPointsToRects(rawAnnot['/QuadPoints']);
-	}
-	else if (Array.isArray(rawAnnot['/Rect'])
-		&& rawAnnot['/Rect'].length % 4 === 0
-		&& rawAnnot['/Rect'].every(x => isValidNumber(x))) {
-		rects = [putils.normalizeRect(rawAnnot['/Rect'])];
-	}
-	else {
-		return null;
-	}
-
-	if (annotation.type === 'note') {
-		if (rects.length > 1) {
+	if (['highlight', 'note', 'image'].includes(annotation.type)) {
+		let rects;
+		if (Array.isArray(rawAnnot['/QuadPoints'])
+			&& rawAnnot['/QuadPoints'].length % 8 === 0
+			&& rawAnnot['/QuadPoints'].every(x => isValidNumber(x))) {
+			rects = utils.quadPointsToRects(rawAnnot['/QuadPoints']);
+		}
+		else if (Array.isArray(rawAnnot['/Rect'])
+			&& rawAnnot['/Rect'].length % 4 === 0
+			&& rawAnnot['/Rect'].every(x => isValidNumber(x))) {
+			rects = [putils.normalizeRect(rawAnnot['/Rect'])];
+		}
+		else {
 			return null;
 		}
-		rects = [resizeAndFitRect(rects[0], NOTE_SIZE, NOTE_SIZE, view)];
+
+		if (annotation.type === 'note') {
+			if (rects.length > 1) {
+				return null;
+			}
+			rects = [resizeAndFitRect(rects[0], NOTE_SIZE, NOTE_SIZE, view)];
+		}
+
+		rects = rects.map(r => r.map(n => Math.round(n * 1000) / 1000));
+		// Sort rects from page top to bottom, left to right
+		rects.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+
+		annotation.position = {
+			pageIndex,
+			rects
+		};
+	}
+	// Ink annotation
+	else {
+		if (!(Array.isArray(rawAnnot['/InkList'])
+			&& rawAnnot['/InkList'].every(path =>
+				Array.isArray(path)
+				&& path.length
+				&& path.length % 2 === 0
+				&& path.every(n => isValidNumber(n))
+			)
+			&& rawAnnot['/BS']
+			&& isValidNumber(rawAnnot['/BS']['/W'])
+		)) {
+			return null;
+		}
+
+		let paths = rawAnnot['/InkList'].map(path => path.map(n => Math.round(n * 1000) / 1000));
+		let width = Math.round(rawAnnot['/BS']['/W'] * 1000) / 1000;
+		annotation.position = {
+			pageIndex,
+			paths,
+			width
+		};
 	}
 
-	rects = rects.map(r => r.map(n => Math.round(n * 1000) / 1000));
-	// Sort rects from page top to bottom, left to right
-	rects.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
-
-	annotation.position = {
-		pageIndex,
-		rects
-	};
-
-	annotation.dateModified = utils.pdfDateToIso(getStr(rawAnnot['/M']));
-	// annotation.authorName = stringToPDFString(getStr(rawAnnot['/T']));
-	annotation.comment = stringToPDFString(getStr(rawAnnot['/Contents']));
+	annotation.dateModified = utils.pdfDateToIso(getString(rawAnnot['/M']));
+	// annotation.authorName = stringToPDFString(getString(rawAnnot['/T']));
+	annotation.comment = stringToPDFString(getString(rawAnnot['/Contents']));
 
 	let colorArray = putils.getColorArray(rawAnnot['/C'] || rawAnnot['/IC']);
 	let alpha = rawAnnot['/CA'];
@@ -163,7 +170,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	annotation.tags = [];
 	if (rawAnnot['/Zotero:Tags']) {
 		try {
-			let tags = JSON.parse(stringToPDFString(getStr(rawAnnot['/Zotero:Tags'])));
+			let tags = JSON.parse(stringToPDFString(getString(rawAnnot['/Zotero:Tags'])));
 			if (Array.isArray(tags) && !tags.find(x => typeof x !== 'string')) {
 				annotation.tags = tags;
 			}
@@ -172,6 +179,8 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 			console.log(e);
 		}
 	}
+
+	annotation.transferable = isTransferable(rawAnnot);
 
 	return annotation;
 };
