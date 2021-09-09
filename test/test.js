@@ -44,7 +44,8 @@ describe('PDF Worker', function () {
 				color: '#ffff00',
 				pageLabel: '1',
 				text: 'Compilers for statically typed languages rely on type information to generate efficient machine code',
-				sortIndex: '00000|002514|00386'
+				sortIndex: '00000|002514|00386',
+				tags: []
 			}, {
 				type: 'highlight',
 				position: {
@@ -56,7 +57,8 @@ describe('PDF Worker', function () {
 				color: '#c9222a',
 				pageLabel: '1',
 				text: 'We present an alternative compilation technique for dynamically-typed languages that identifies frequently executed loop traces at run-time and then generates machine code on the fly that is specialized for the actual dynamic types occurring on each path through the loop',
-				sortIndex: '00000|000779|00381'
+				sortIndex: '00000|000779|00381',
+				tags: []
 			}, {
 				type: 'highlight',
 				position: { pageIndex: 0, rects: [[54, 199.237, 293.1, 207.253], [54, 189.274, 67.943, 197.29]] },
@@ -65,7 +67,8 @@ describe('PDF Worker', function () {
 				color: '#589fee',
 				pageLabel: '1',
 				text: 'Dynamic languages such as JavaScript, Python, and Ruby, are popular',
-				sortIndex: '00000|001536|00584'
+				sortIndex: '00000|001536|00584',
+				tags: []
 			}, {
 				type: 'highlight',
 				position: {
@@ -77,7 +80,8 @@ describe('PDF Worker', function () {
 				color: '#f8c348',
 				pageLabel: '1',
 				text: 'Dynamic languages such as JavaScript, Python, and Ruby, are popular since they are expressive, accessible to non-experts, and make deployment as easy as distributing a source file. They are used for small scripts as well as for complex applications',
-				sortIndex: '00000|001536|00584'
+				sortIndex: '00000|001536|00584',
+				tags: []
 			}, {
 				type: 'highlight',
 				position: {
@@ -89,7 +93,8 @@ describe('PDF Worker', function () {
 				color: '#589fee',
 				pageLabel: '1',
 				text: 'Unlike method-based dynamic compilers, our dynamic compiler operates at the granularity of individual loops. This design choice is based on the expectation that programs spend most of their time in hot loops',
-				sortIndex: '00000|003552|00587'
+				sortIndex: '00000|003552|00587',
+				tags: []
 			}, {
 				type: 'note',
 				position: { pageIndex: 1, rects: [[343.157, 557.388, 365.157, 579.388]] },
@@ -97,7 +102,8 @@ describe('PDF Worker', function () {
 				comment: 'Another comment',
 				color: '#ffff00',
 				pageLabel: '2',
-				sortIndex: '00001|003634|00212'
+				sortIndex: '00001|003634|00212',
+				tags: []
 			}, {
 				type: 'highlight',
 				position: {
@@ -109,7 +115,8 @@ describe('PDF Worker', function () {
 				color: '#6cc055',
 				pageLabel: '2',
 				text: 'Nested loops can be difficult to optimize for tracing VMs. In a na ̈ıve implementation, inner loops would become hot first, and the VM would start tracing there.',
-				sortIndex: '00001|000459|00163'
+				sortIndex: '00001|000459|00163',
+				tags: []
 			}, {
 				type: 'highlight',
 				position: { pageIndex: 1, rects: [[54, 470.99, 293.107, 479.006], [54, 461.027, 268.978, 469.043]] },
@@ -118,7 +125,8 @@ describe('PDF Worker', function () {
 				color: '#f8c348',
 				pageLabel: '2',
 				text: 'The system stops extending the inner tree when it reaches an outer loop, but then it starts a new trace at the outer loop header.',
-				sortIndex: '00001|001247|00312'
+				sortIndex: '00001|001247|00312',
+				tags: []
 			}, {
 				type: 'highlight',
 				position: {
@@ -130,7 +138,8 @@ describe('PDF Worker', function () {
 				color: '#f8c348',
 				pageLabel: '2',
 				text: 'We implemented these techniques for an existing JavaScript interpreter, SpiderMonkey. We call the resulting tracing VM TraceMonkey. TraceMonkey supports all the JavaScript features of SpiderMonkey, with a 2x-20x speedup for traceable programs',
-				sortIndex: '00001|002143|00482'
+				sortIndex: '00001|002143|00482',
+				tags: []
 			}, {
 				type: 'note',
 				position: { pageIndex: 1, rects: [[478.3, 697, 500.3, 719]] },
@@ -138,7 +147,8 @@ describe('PDF Worker', function () {
 				comment: 'Use this in my thesis',
 				color: '#f8c348',
 				pageLabel: '2',
-				sortIndex: '00001|003310|00073'
+				sortIndex: '00001|003310|00073',
+				tags: []
 			}, {
 				type: 'highlight',
 				position: {
@@ -150,7 +160,8 @@ describe('PDF Worker', function () {
 				color: '#f8c348',
 				pageLabel: '2',
 				text: 'TraceMonkey always begins executing a program in the bytecode interpreter.',
-				sortIndex: '00001|004682|00607'
+				sortIndex: '00001|004682|00607',
+				tags: []
 			}, {
 				type: 'highlight',
 				position: {
@@ -162,7 +173,8 @@ describe('PDF Worker', function () {
 				color: '#f8c348',
 				pageLabel: '2',
 				text: 'At the start of execution, there are no compiled traces yet, so the trace monitor counts the number of times each loop back edge is executed until a loop becomes hot, currently after 2 crossings',
-				sortIndex: '00001|004901|00647'
+				sortIndex: '00001|004901|00647',
+				tags: []
 			}], deleted: []
 		};
 
@@ -187,7 +199,8 @@ describe('PDF Worker', function () {
 			'authorName': 'John',
 			'text': 'We present an alternative compilation technique for dynamically-typed languages that identifies frequently executed loop traces at run-time and then generates machine code on the fly that is specialized for the actual dynamic types occurring on each path through the loop',
 			'comment': 'Sounds promising',
-			'dateModified': '2020-02-07T07:24:34.638Z'
+			'dateModified': '2020-02-07T07:24:34.638Z',
+			'tags': ['tag1', 'tag2', 'tag3']
 		},
 		{
 			'id': 'BBBBCCCC',
@@ -202,7 +215,8 @@ describe('PDF Worker', function () {
 				]
 			},
 			'authorName': 'John',
-			'dateModified': '2021-08-20T07:24:34.638Z'
+			'dateModified': '2021-08-20T07:24:34.638Z',
+			'tags': ['tag1', 'tag2', 'tag3']
 		}];
 
 		let buf = fs.readFileSync(__dirname + '/pdfs/1.pdf');

@@ -159,5 +159,19 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 		colorArray = colorArray.map(c => alpha * c + (1 - alpha) * 255);
 	}
 	annotation.color = arrayColorToHex(colorArray);
+
+	annotation.tags = [];
+	if (rawAnnot['/Zotero:Tags']) {
+		try {
+			let tags = JSON.parse(stringToPDFString(getStr(rawAnnot['/Zotero:Tags'])));
+			if (Array.isArray(tags) && !tags.find(x => typeof x !== 'string')) {
+				annotation.tags = tags;
+			}
+		}
+		catch (e) {
+			console.log(e);
+		}
+	}
+
 	return annotation;
 };

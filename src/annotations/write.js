@@ -91,7 +91,7 @@ function annotationToRaw(annotation) {
 	}
 
 	if (annotation.type === 'note') {
-		return {
+		let res = {
 			'/Type': '/Annot',
 			'/Rect': containerRect,
 			'/Subtype': '/Text',
@@ -99,6 +99,7 @@ function annotationToRaw(annotation) {
 			'/T': '(' + stringToRaw(annotation.authorName) + ')',
 			'/Contents': '(' + stringToRaw(annotation.comment) + ')',
 			'/NM': '(' + 'Zotero-' + annotation.id + ')',
+			'/Zotero:Key': '(' + annotation.id + ')',
 			'/F': 4,
 			'/C': colorToRaw(annotation.color),
 			'/CA': 1,
@@ -126,6 +127,12 @@ function annotationToRaw(annotation) {
 			num: 0,
 			gen: 0
 		};
+
+		if (annotation.tags.length) {
+			res['/Zotero:Tags'] = '(' + stringToRaw(JSON.stringify(annotation.tags)) + ')';
+		}
+
+		return res;
 	}
 	else if (annotation.type === 'highlight') {
 		let p = '';
@@ -145,6 +152,7 @@ function annotationToRaw(annotation) {
 			'/T': '(' + stringToRaw(annotation.authorName) + ')',
 			'/Contents': '(' + stringToRaw(annotation.comment) + ')',
 			'/NM': '(' + 'Zotero-' + annotation.id + ')',
+			'/Zotero:Key': '(' + annotation.id + ')',
 			'/C': colorToRaw(annotation.color),
 			'/AP': {
 				'/N': {
@@ -177,6 +185,11 @@ function annotationToRaw(annotation) {
 		if (!annotation.comment) {
 			delete res['/Contents'];
 		}
+
+		if (annotation.tags.length) {
+			res['/Zotero:Tags'] = '(' + stringToRaw(JSON.stringify(annotation.tags)) + ')';
+		}
+
 		return res;
 	}
 	else if (annotation.type === 'image') {
@@ -187,7 +200,7 @@ function annotationToRaw(annotation) {
 			containerRect[3] - containerRect[1]
 		].join(' ');
 
-		return {
+		let res = {
 			'/Type': '/Annot',
 			'/Subtype': '/Square',
 			'/Rect': containerRect,
@@ -221,6 +234,12 @@ function annotationToRaw(annotation) {
 			num: 0,
 			gen: 0
 		};
+
+		if (annotation.tags.length) {
+			res['/Zotero:Tags'] = '(' + stringToRaw(JSON.stringify(annotation.tags)) + ')';
+		}
+
+		return res;
 	}
 	else if (annotation.type === 'ink') {
 		let p = '';
@@ -239,7 +258,7 @@ function annotationToRaw(annotation) {
 			// p += `h\r`;
 		}
 
-		return {
+		let res = {
 			'/Type': '/Annot',
 			'/Subtype': '/Ink',
 			'/Rect': containerRect,
@@ -283,6 +302,12 @@ function annotationToRaw(annotation) {
 			num: 0,
 			gen: 0
 		};
+
+		if (annotation.tags.length) {
+			res['/Zotero:Tags'] = '(' + stringToRaw(JSON.stringify(annotation.tags)) + ')';
+		}
+
+		return res;
 	}
 }
 
