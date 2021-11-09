@@ -3,9 +3,12 @@ const { getInfo } = require('./pdfinfo');
 const { readRawAnnotations } = require('./annotations/read');
 const { writeRawAnnotations } = require('./annotations/write');
 const { deleteAnnotations } = require('./annotations/delete');
-const { extractRange } = require('./text/range');
-const { getClosestOffset } = require('./text/offset');
-const { getPageLabelPoints, getPageLabel } = require('./text/page');
+const {
+	getRangeByHighlight,
+	getClosestOffset,
+	getPageLabelPoints,
+	getPageLabel
+} = require('./text');
 const { Util } = require('../pdf.js/build/lib/shared/util');
 const { resizeAndFitRect } = require('./annotations/read');
 
@@ -84,7 +87,9 @@ async function getPageChs(pageIndex, pdfDocument, cmapProvider) {
 	let chs = [];
 	for (let item of pageItems) {
 		for (let ch of item.chars) {
-			chs.push(ch);
+			if (ch.rotation % 90 === 0 && ch.c !== ' ') {
+				chs.push(ch);
+			}
 		}
 	}
 
@@ -177,7 +182,9 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 			pageChs = [];
 			for (let item of pageItems) {
 				for (let ch of item.chars) {
-					pageChs.push(ch);
+					if (ch.rotation % 90 === 0 && ch.c !== ' ') {
+						pageChs.push(ch);
+					}
 				}
 			}
 			pageHeight = page.view[3];
@@ -204,7 +211,7 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 
 		let offset = 0;
 		if (annotation.type === 'highlight') {
-			let range = extractRange(pageChs, annotation.position.rects);
+			let range = getRangeByHighlight(pageChs, annotation.position.rects);
 			if (range) {
 				offset = range.offset;
 				annotation.text = range.text;
@@ -345,7 +352,9 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 			pageChs = [];
 			for (let item of pageItems) {
 				for (let ch of item.chars) {
-					pageChs.push(ch);
+					if (ch.rotation % 90 === 0 && ch.c !== ' ') {
+						pageChs.push(ch);
+					}
 				}
 			}
 			pageHeight = page.view[3];
@@ -373,7 +382,7 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 
 		let offset = 0;
 		if (annotation.type === 'highlight') {
-			let range = extractRange(pageChs, annotation.position.rects);
+			let range = getRangeByHighlight(pageChs, annotation.position.rects);
 			if (range) {
 				offset = range.offset;
 				annotation.text = range.text;
