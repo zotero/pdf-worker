@@ -34,8 +34,6 @@ const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
 const { arraysToBytes, bytesToString } = require('../pdf.js/build/lib/shared/util');
 const { deflate } = require('pako');
 
-const producer = 'Zotero';
-
 class PDFAssembler {
 	constructor() {
 		this.pdfManager = null;
@@ -87,7 +85,18 @@ class PDFAssembler {
 				delete this.pdfTree['/Info']['/IsAcroFormPresent'];
 				delete this.pdfTree['/Info']['/IsXFAPresent'];
 				delete this.pdfTree['/Info']['/PDFFormatVersion'];
+
+				let producer = this.pdfManager.pdfDocument.documentInfo.Producer;
+				if (producer) {
+					if (!producer.includes('Zotero')) {
+						producer = `Zotero (${producer})`;
+					}
+				}
+				else {
+					producer = 'Zotero';
+				}
 				this.pdfTree['/Info']['/Producer'] = '(' + producer + ')';
+
 				this.pdfTree['/Info']['/ModDate'] = '(' + this.toPdfDate() + ')';
 				this.flattenPageTree();
 			}
