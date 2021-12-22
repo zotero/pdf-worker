@@ -134,7 +134,16 @@ async function writeAnnotations(buf, annotations, password) {
 }
 
 function getKey(annotation) {
-	return annotation.type + annotation.position.pageIndex + JSON.stringify(annotation.position.rects) + annotation.comment;
+	let str =	annotation.type + annotation.position.pageIndex;
+	if (annotation.type === 'ink') {
+		str += annotation.position.width;
+		str += JSON.stringify(annotation.position.paths);
+	}
+	else {
+		str += JSON.stringify(annotation.position.rects);
+	}
+	str += annotation.comment;
+	return str;
 }
 
 function duplicated(a, b) {
