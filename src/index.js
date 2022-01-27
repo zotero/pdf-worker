@@ -324,6 +324,10 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 					.normalizeRect([rect.x1, rect.y1, rect.x2, rect.y2])
 					.map(n => Math.round(n * 1000) / 1000);
 				});
+				// Some Mendeley annotations don't have rects, for unknown reason
+				if (!rects.length) {
+					continue;
+				}
 				// Sort rects from page top to bottom, left to right
 				rects.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
 
