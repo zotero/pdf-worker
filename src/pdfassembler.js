@@ -214,15 +214,26 @@ class PDFAssembler {
 			}
 			if (node instanceof DecodeStream || node instanceof Stream) {
 				const streamsToDecode = [FlateStream, PredictorStream, DecryptStream, Ascii85Stream, RunLengthStream, LZWStream];
-				if (objectNode['/Subtype'] !== '/Image' &&
-					streamsToDecode.some(streamToDecode => node instanceof streamToDecode)) {
+				// Filters from PDF.js Parser.filter()
+				const standardFilters = [
+					'LZWDecode', 'DCTDecode', 'JPXDecode', 'ASCII85Decode', 'ASCIIHexDecode', 'CCITTFaxDecode', 'RunLengthDecode', 'JBIG2Decode',
+					'LZW', 'DCT', 'JPX', 'A85', 'AHx', 'CCF', 'RL'
+				];
+				if (objectNode['/Subtype'] !== '/Image'
+					&& streamsToDecode.some(streamToDecode => node instanceof streamToDecode)
+					// Decode stream if all filters are standard
+					&& (
+						!objectNode['/Filter']
+						|| typeof objectNode['/Filter'] === 'string'
+						|| (
+							Array.isArray(objectNode['/Filter'])
+							// At this point everything is flattened therefore we're just looking for a filter string, we can't use .name property here
+							&& objectNode['/Filter'].every(f => standardFilters.some(sf => f.includes(sf)))
+						)
+					)
+				) {
 					objectNode.stream = node.getBytes();
-					if (objectNode['/Filter'] instanceof Array && objectNode['/Filter'].length > 1) {
-						objectNode['/Filter'].shift();
-					}
-					else {
-						delete objectNode['/Filter'];
-					}
+					delete objectNode['/Filter'];
 				}
 				if (!objectNode.stream) {
 					for (const checkSource of [
