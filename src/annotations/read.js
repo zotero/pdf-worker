@@ -153,7 +153,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	}
 
 	annotation.dateModified = utils.pdfDateToIso(getString(rawAnnot['/M']));
-	// annotation.authorName = stringToPDFString(getString(rawAnnot['/T']));
+	annotation.authorName = stringToPDFString(getString(rawAnnot['/Zotero:AuthorName']));
 	annotation.comment = stringToPDFString(getString(rawAnnot['/Contents']));
 
 	let colorArray = putils.getColorArray(rawAnnot['/C'] || rawAnnot['/IC']);
