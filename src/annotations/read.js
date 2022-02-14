@@ -92,7 +92,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 		annotation.id = getAnnotationID(rawAnnot);
 	}
 
-	if (type === 'image' && !annotation.id) {
+	if (['image', 'ink'].includes(type) && !annotation.id) {
 		return null;
 	}
 
