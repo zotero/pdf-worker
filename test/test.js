@@ -22,6 +22,7 @@
 
  ***** END LICENSE BLOCK *****
  */
+/* eslint-env mocha, node */
 
 const path = require('path');
 const expect = require('chai').expect;
