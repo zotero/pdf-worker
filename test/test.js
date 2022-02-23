@@ -40,6 +40,7 @@ describe('PDF Worker', function () {
 				type: 'highlight',
 				position: { pageIndex: 0, rects: [[328, 395, 557, 406], [317, 385, 455, 396]] },
 				dateModified: '2019-06-05T13:52:44.000Z',
+				authorName: '',
 				comment: 'A comment for the highlighted text',
 				color: '#ffff00',
 				pageLabel: '1',
@@ -54,6 +55,7 @@ describe('PDF Worker', function () {
 					rects: [[231.284, 402.126, 293.107, 410.142], [54, 392.164, 293.107, 400.18], [54, 382.201, 293.107, 390.217], [54, 372.238, 293.107, 380.254], [54, 362.276, 273.955, 370.292]]
 				},
 				dateModified: '2020-02-07T07:24:34.000Z',
+				authorName: '',
 				comment: 'Sounds promising',
 				color: '#c9222a',
 				pageLabel: '1',
@@ -65,6 +67,7 @@ describe('PDF Worker', function () {
 				type: 'highlight',
 				position: { pageIndex: 0, rects: [[54, 199.237, 293.1, 207.253], [54, 189.274, 67.943, 197.29]] },
 				dateModified: '2020-02-07T07:24:37.000Z',
+				authorName: '',
 				comment: 'Comment 2',
 				color: '#589fee',
 				pageLabel: '1',
@@ -79,6 +82,7 @@ describe('PDF Worker', function () {
 					rects: [[54, 199.237, 293.1, 207.253], [54, 189.274, 293.107, 197.29], [54, 179.311, 293.107, 187.327], [54, 169.349, 234.673, 177.365]]
 				},
 				dateModified: '2020-02-07T07:23:13.000Z',
+				authorName: '',
 				comment: 'Comment 1',
 				color: '#f8c348',
 				pageLabel: '1',
@@ -93,6 +97,7 @@ describe('PDF Worker', function () {
 					rects: [[328.969, 196.896, 556.115, 204.912], [317.014, 186.933, 556.121, 194.949], [317.014, 176.971, 556.121, 184.987], [317.014, 167.008, 398.671, 175.024]]
 				},
 				dateModified: '2020-02-07T07:23:32.000Z',
+				authorName: '',
 				comment: 'An important point',
 				color: '#589fee',
 				pageLabel: '1',
@@ -104,6 +109,7 @@ describe('PDF Worker', function () {
 				type: 'note',
 				position: { pageIndex: 1, rects: [[343.157, 557.388, 365.157, 579.388]] },
 				dateModified: '2019-06-05T13:53:32.000Z',
+				authorName: '',
 				comment: 'Another comment',
 				color: '#ffff00',
 				pageLabel: '2',
@@ -117,6 +123,7 @@ describe('PDF Worker', function () {
 					rects: [[65.955, 620.429, 293.101, 628.445], [54, 610.467, 293.106, 618.528], [54, 600.504, 177.745, 608.52]]
 				},
 				dateModified: '2020-02-07T07:23:50.000Z',
+				authorName: '',
 				comment: 'A problem of nested loops',
 				color: '#6cc055',
 				pageLabel: '2',
@@ -128,6 +135,7 @@ describe('PDF Worker', function () {
 				type: 'highlight',
 				position: { pageIndex: 1, rects: [[54, 470.99, 293.107, 479.006], [54, 461.027, 268.978, 469.043]] },
 				dateModified: '2020-02-07T07:24:04.000Z',
+				authorName: '',
 				comment: '',
 				color: '#f8c348',
 				pageLabel: '2',
@@ -142,6 +150,7 @@ describe('PDF Worker', function () {
 					rects: [[65.955, 301.625, 293.101, 309.641], [54, 291.662, 293.104, 299.678], [54, 281.7, 293.107, 289.716], [54, 271.737, 263.85, 279.753]]
 				},
 				dateModified: '2020-02-07T07:24:12.000Z',
+				authorName: '',
 				comment: '',
 				color: '#f8c348',
 				pageLabel: '2',
@@ -153,6 +162,7 @@ describe('PDF Worker', function () {
 				type: 'note',
 				position: { pageIndex: 1, rects: [[478.3, 697, 500.3, 719]] },
 				dateModified: '2020-02-07T07:23:40.000Z',
+				authorName: '',
 				comment: 'Use this in my thesis',
 				color: '#f8c348',
 				pageLabel: '2',
@@ -166,6 +176,7 @@ describe('PDF Worker', function () {
 					rects: [[328.969, 176.096, 556.115, 184.112], [317.014, 166.133, 376.291, 174.149]]
 				},
 				dateModified: '2020-02-07T07:24:24.000Z',
+				authorName: '',
 				comment: '',
 				color: '#f8c348',
 				pageLabel: '2',
@@ -180,6 +191,7 @@ describe('PDF Worker', function () {
 					rects: [[338.883, 136.245, 556.121, 144.261], [317.014, 126.282, 556.121, 134.298], [317.014, 116.32, 534.474, 124.336]]
 				},
 				dateModified: '2020-02-07T07:24:29.000Z',
+				authorName: '',
 				comment: '',
 				color: '#f8c348',
 				pageLabel: '2',

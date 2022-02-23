@@ -162,6 +162,98 @@ function getDeleted(current, existing) {
 	return existing.filter(a => !current.some(b => duplicated(a, b))).map(a => a.id);
 }
 
+/**
+ * Note: It currently leaves gaps at the path cut points, but this can be solved by
+ * repeating the previous point at the beginning of the newly cut path
+ *
+ * Note2: At some point this will be necessary on pdf-reader, if we'll implement ink drawing
+ *
+ * @param {Object} annotation
+ * @returns {Array} Annotations annotations
+ */
+function splitAnnotation(annotation) {
+	const MAX_ANNOTATION_POSITION_SIZE = 65000;
+	if (JSON.stringify(annotation.position).length < MAX_ANNOTATION_POSITION_SIZE) {
+		return [annotation];
+	}
+	let splitAnnotations = [];
+	let tmpAnnotation = null;
+	let totalLength = 0;
+	if (annotation.position.rects) {
+		for (let i = 0; i < annotation.position.rects.length; i++) {
+			let rect = annotation.position.rects[i];
+			if (!tmpAnnotation) {
+				tmpAnnotation = JSON.parse(JSON.stringify(annotation));
+				tmpAnnotation.position.rects = [];
+				totalLength = JSON.stringify(tmpAnnotation.position).length;
+			}
+			// [],
+			let length = rect.join(',').length + 3;
+			if (totalLength + length <= MAX_ANNOTATION_POSITION_SIZE) {
+				tmpAnnotation.position.rects.push(rect);
+				totalLength += length;
+			}
+			else if (!tmpAnnotation.position.rects.length) {
+				throw new Error(`Cannot fit single 'rect' into 'position'`);
+			}
+			else {
+				splitAnnotations.push(tmpAnnotation);
+				tmpAnnotation = null;
+				i--;
+			}
+		}
+		if (tmpAnnotation) {
+			splitAnnotations.push(tmpAnnotation);
+		}
+	}
+	else if (annotation.position.paths) {
+		for (let i = 0; i < annotation.position.paths.length; i++) {
+			let path = annotation.position.paths[i];
+			for (let j = 0; j < path.length; j += 2) {
+				if (!tmpAnnotation) {
+					tmpAnnotation = JSON.parse(JSON.stringify(annotation));
+					tmpAnnotation.position.paths = [[]];
+					totalLength = JSON.stringify(tmpAnnotation.position).length;
+				}
+				let point = [path[j], path[j + 1]];
+				// 1,2,
+				let length = point.join(',').length + 1;
+				if (totalLength + length <= MAX_ANNOTATION_POSITION_SIZE) {
+					tmpAnnotation.position.paths[tmpAnnotation.position.paths.length - 1].push(...point);
+					totalLength += length;
+				}
+				else if (tmpAnnotation.position.paths.length === 1
+					&& !tmpAnnotation.position.paths[tmpAnnotation.position.paths.length - 1].length) {
+					throw new Error(`Cannot fit single point into 'position'`);
+				}
+				else {
+					splitAnnotations.push(tmpAnnotation);
+					tmpAnnotation = null;
+					j -= 2;
+				}
+			}
+			// If not the last path
+			if (i !== annotation.position.paths.length - 1) {
+				// [],
+				totalLength += 3;
+				tmpAnnotation.position.paths.push([]);
+			}
+		}
+		if (tmpAnnotation) {
+			splitAnnotations.push(tmpAnnotation);
+		}
+	}
+	return splitAnnotations;
+}
+
+function splitAnnotations(annotations) {
+	let splitAnnotations = [];
+	for (let annotation of annotations) {
+		splitAnnotations.push(...splitAnnotation(annotation));
+	}
+	return splitAnnotations;
+}
+
 async function importAnnotations(buf, existingAnnotations, password, transfer, cmapProvider) {
 	let pdf = new PDFAssembler();
 	await pdf.init(buf, password);
@@ -178,6 +270,10 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 
 	let imported = transfer ? annotations : getImported(annotations, existingAnnotations);
 	let deleted = transfer ? existingAnnotations.map(x => x.id) : getDeleted(annotations, existingAnnotations);
+
+	if (transfer) {
+		imported = splitAnnotations(imported);
+	}
 
 	let pageChs;
 	let pageHeight;
@@ -352,6 +448,8 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 			console.log(e);
 		}
 	}
+
+	annotations = splitAnnotations(annotations);
 
 	let pageChs;
 	let pageHeight;
