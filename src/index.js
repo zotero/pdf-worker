@@ -499,7 +499,15 @@ async function processAnnotations(annotations, pdf, cmapProvider, { keepText = f
 async function importCitaviAnnotations(buf, citaviAnnotations, password, cmapProvider) {
 	const pdf = new PDFAssembler();
 	await pdf.init(buf, password);
-	const annotations = [...citaviAnnotations];
+	const annotations = citaviAnnotations.map(
+		ca => ({
+			...ca,
+			position: {
+				...ca.position,
+				rects: ca.position.rects.map(rect => rect.map(n => Math.round(n * 1000) / 1000))
+			}
+		})
+	);
 	// Citavi annotations come with "text" field correctly pre-populated hence keepText: true
 	await processAnnotations(annotations, pdf, cmapProvider, { keepText: true });
 	return annotations;

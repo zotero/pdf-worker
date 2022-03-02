@@ -441,5 +441,6 @@ describe('PDF Worker', function () {
 		expect(processedAnnotations.sortIndex).to.equal('00000|000103|00206');
 		expect(processedAnnotations.text).to.equal('peer-to-peer');
 		expect(processedAnnotations.pageLabel).to.equal('1');
+		expect(processedAnnotations.position.rects[0]).to.deep.equal([230.202, 578.879, 275.478, 585.817]);
 	});
 });
