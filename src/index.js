@@ -390,7 +390,32 @@ async function extractStructure() {
 
 }
 
-async function processAnnotations(annotations, pdf, cmapProvider, { preserveText = false, convertLowHighlights = true } = {}) {
+/**
+ * Based on annotation position data (page index and rect) modifies each
+ * annotation object adding or changing the following keys:
+ *   * Descriptive page number (1-indexed)
+ *   * Extract text content of the highlight from the PDF document (unless
+ *     keepText = true)
+ *   * Sort index
+ *
+ * It will also convert highlights that contain no text and are no taller than
+ * 20 pixels to annotation type "image" (unless fixTiny = false). This extra
+ * processing is used for Mendeley import.
+ *
+ * @param      {Array}    annotations            Array of annotation
+ * @param      {Object}   pdf                    PDF document API
+ * @param      {Object}   cmapProvider           cmap provider
+ * @param      {Object}   [arg4={}]              Additional configuration
+ * @param      {boolean}  [arg4.keepText=false]  Whether to keep text from
+ *                                               annotation object rather than
+ *                                               extract from pdf object
+ * @param      {boolean}  [arg4.fixTiny=false]   Whether to convert certain
+ *                                               highlights to image annotation
+ *                                               (see above)
+ * @return     {Promise}  Promise resolves with no value once all annotations
+ *                        have been processed (inline).
+ */
+async function processAnnotations(annotations, pdf, cmapProvider, { keepText = false, fixTiny = false } = {}) {
 	let pageChs;
 	let pageHeight;
 	let loadedPageIndex = null;
@@ -439,7 +464,7 @@ async function processAnnotations(annotations, pdf, cmapProvider, { preserveText
 			let range = getRangeByHighlight(pageChs, annotation.position.rects);
 			if (range) {
 				offset = range.offset;
-				annotation.text = (preserveText && annotation.text) ? annotation.text : range.text;
+				annotation.text = (keepText && annotation.text) ? annotation.text : range.text;
 			}
 		}
 		// 'note'
@@ -458,7 +483,7 @@ async function processAnnotations(annotations, pdf, cmapProvider, { preserveText
 			Math.floor(top).toString().slice(0, 5).padStart(5, '0')
 		].join('|');
 
-		if (convertLowHighlights
+		if (fixTiny
 			&& annotation.position.rects.length === 1
 			&& annotation.type === 'highlight'
 			// TODO: Consider to remove this minimal height check when range
@@ -475,7 +500,8 @@ async function importCitaviAnnotations(buf, citaviAnnotations, password, cmapPro
 	const pdf = new PDFAssembler();
 	await pdf.init(buf, password);
 	const annotations = [...citaviAnnotations];
-	await processAnnotations(annotations, pdf, cmapProvider, { preserveText: true, convertLowHighlights: false });
+	// Citavi annotations come with "text" field correctly pre-populated hence keepText: true
+	await processAnnotations(annotations, pdf, cmapProvider, { keepText: true });
 	return annotations;
 }
 
@@ -538,7 +564,9 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 		}
 	}
 
-	await processAnnotations(annotations, pdf, cmapProvider);
+	// some Mendeley annotations are incorrectly marked as highlights instead of images. Using
+	// fixTiny to convert these to images
+	await processAnnotations(annotations, pdf, cmapProvider, { fixTiny: true });
 	return annotations;
 }
 
