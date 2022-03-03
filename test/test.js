@@ -22,7 +22,9 @@
 
  ***** END LICENSE BLOCK *****
  */
+/* eslint-env mocha, node */
 
+const path = require('path');
 const expect = require('chai').expect;
 
 const fs = require('fs');
@@ -402,5 +404,43 @@ describe('PDF Worker', function () {
 		}];
 
 		expect(annotations).to.deep.equal(result);
+	});
+
+	it('should process Citavi annotations', async () => {
+		const citaviAnnotation = {
+			key: 'B3UENNWP',
+			type: 'highlight',
+			text: null,
+			position:
+			{
+				pageIndex: 0,
+				rects: [
+					[
+						230.20219999999998,
+						578.879472,
+						275.47790585937497,
+						585.816528
+					],
+					[
+						230.20219999999998,
+						578.879472,
+						275.47790585937497,
+						585.816528
+					]
+				]
+			},
+			pageLabel: '',
+			dateAdded: '2022-02-18T17:24:15',
+			dateModified: '2022-02-18T17:24:24',
+			tags: [{ name: 'red' }],
+			color: '#ff6666'
+		};
+		const buf = fs.readFileSync(path.join(__dirname, 'pdfs', '2.pdf'));
+		const [processedAnnotations] = await pdfWorker.importCitaviAnnotations(buf, [citaviAnnotation]);
+		expect(processedAnnotations.key).to.equal('B3UENNWP');
+		expect(processedAnnotations.sortIndex).to.equal('00000|000103|00206');
+		expect(processedAnnotations.text).to.equal('peer-to-peer');
+		expect(processedAnnotations.pageLabel).to.equal('1');
+		expect(processedAnnotations.position.rects[0]).to.deep.equal([230.202, 578.879, 275.478, 585.817]);
 	});
 });

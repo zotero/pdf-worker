@@ -390,6 +390,129 @@ async function extractStructure() {
 
 }
 
+/**
+ * Based on annotation position data (page index and rect) modifies each
+ * annotation object adding or changing the following keys:
+ *   * Descriptive page number (1-indexed)
+ *   * Extract text content of the highlight from the PDF document (unless
+ *     keepText = true)
+ *   * Sort index
+ *
+ * It will also convert highlights that contain no text and are no taller than
+ * 20 pixels to annotation type "image" (unless fixTiny = false). This extra
+ * processing is used for Mendeley import.
+ *
+ * @param      {Array}    annotations            Array of annotation
+ * @param      {Object}   pdf                    PDF document API
+ * @param      {Object}   cmapProvider           cmap provider
+ * @param      {Object}   [arg4={}]              Additional configuration
+ * @param      {boolean}  [arg4.keepText=false]  Whether to keep text from
+ *                                               annotation object rather than
+ *                                               extract from pdf object
+ * @param      {boolean}  [arg4.fixTiny=false]   Whether to convert certain
+ *                                               highlights to image annotation
+ *                                               (see above)
+ * @return     {Promise}  Promise resolves with no value once all annotations
+ *                        have been processed (inline).
+ */
+async function processAnnotations(annotations, pdf, cmapProvider, { keepText = false, fixTiny = false } = {}) {
+	let pageChs;
+	let pageHeight;
+	let loadedPageIndex = null;
+	const pdfDocument = pdf.pdfManager.pdfDocument;
+	annotations = splitAnnotations(annotations);
+
+	for (let annotation of annotations) {
+		let pageIndex = annotation.position.pageIndex;
+		if (loadedPageIndex !== pageIndex) {
+			let page = await pdfDocument.getPage(pageIndex);
+			let pageItems = await getText(page, cmapProvider);
+			loadedPageIndex = pageIndex;
+			pageChs = [];
+			for (let item of pageItems) {
+				for (let ch of item.chars) {
+					if (ch.rotation % 90 === 0 && ch.c !== ' ') {
+						pageChs.push(ch);
+					}
+				}
+			}
+			pageHeight = page.view[3];
+		}
+
+		let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
+		if (points) {
+			// annotation.pageLabel = '-';
+			// TODO: Improve extractPageLabel
+			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider);
+			if (pageLabel) {
+				annotation.pageLabel = pageLabel;
+			}
+		}
+
+		if (!annotation.pageLabel) {
+			let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
+			if (pageLabels && pageLabels[pageIndex]) {
+				annotation.pageLabel = pageLabels[pageIndex];
+			}
+			else {
+				annotation.pageLabel = (pageIndex + 1).toString();
+			}
+		}
+
+		let offset = 0;
+		if (annotation.type === 'highlight') {
+			let range = getRangeByHighlight(pageChs, annotation.position.rects);
+			if (range) {
+				offset = range.offset;
+				annotation.text = (keepText && annotation.text) ? annotation.text : range.text;
+			}
+		}
+		// 'note'
+		else {
+			offset = getClosestOffset(pageChs, annotation.position.rects[0]);
+		}
+
+		let top = pageHeight - annotation.position.rects[0][3];
+		if (top < 0) {
+			top = 0;
+		}
+
+		annotation.sortIndex = [
+			annotation.position.pageIndex.toString().slice(0, 5).padStart(5, '0'),
+			offset.toString().slice(0, 6).padStart(6, '0'),
+			Math.floor(top).toString().slice(0, 5).padStart(5, '0')
+		].join('|');
+
+		if (fixTiny
+			&& annotation.position.rects.length === 1
+			&& annotation.type === 'highlight'
+			// TODO: Consider to remove this minimal height check when range
+			//  extraction precision is increased
+			&& annotation.position.rects[0][2] - annotation.position.rects[0][0] > 20
+			&& !annotation.text) {
+			annotation.type = 'image';
+			delete annotation.text;
+		}
+	}
+}
+
+async function importCitaviAnnotations(buf, citaviAnnotations, password, cmapProvider) {
+	const pdf = new PDFAssembler();
+	await pdf.init(buf, password);
+	const annotations = citaviAnnotations.map(
+		ca => ({
+			...ca,
+			position: {
+				...ca.position,
+				rects: ca.position.rects.map(rect => rect.map(n => Math.round(n * 1000) / 1000))
+			}
+		})
+	);
+	// Citavi annotations come with "text" field correctly pre-populated hence keepText: true
+	await processAnnotations(annotations, pdf, cmapProvider, { keepText: true });
+	return annotations;
+}
+
 async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cmapProvider) {
 	let pdf = new PDFAssembler();
 	await pdf.init(buf, password);
@@ -449,84 +572,12 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 		}
 	}
 
-	annotations = splitAnnotations(annotations);
-
-	let pageChs;
-	let pageHeight;
-	let loadedPageIndex = null;
-	for (let annotation of annotations) {
-		let pageIndex = annotation.position.pageIndex;
-		if (loadedPageIndex !== pageIndex) {
-			let page = await pdfDocument.getPage(pageIndex);
-			let pageItems = await getText(page, cmapProvider);
-			loadedPageIndex = pageIndex;
-			pageChs = [];
-			for (let item of pageItems) {
-				for (let ch of item.chars) {
-					if (ch.rotation % 90 === 0 && ch.c !== ' ') {
-						pageChs.push(ch);
-					}
-				}
-			}
-			pageHeight = page.view[3];
-		}
-
-		let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
-		if (points) {
-			// annotation.pageLabel = '-';
-			// TODO: Improve extractPageLabel
-			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider);
-			if (pageLabel) {
-				annotation.pageLabel = pageLabel;
-			}
-		}
-
-		if (!annotation.pageLabel) {
-			let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
-			if (pageLabels && pageLabels[pageIndex]) {
-				annotation.pageLabel = pageLabels[pageIndex];
-			}
-			else {
-				annotation.pageLabel = (pageIndex + 1).toString();
-			}
-		}
-
-		let offset = 0;
-		if (annotation.type === 'highlight') {
-			let range = getRangeByHighlight(pageChs, annotation.position.rects);
-			if (range) {
-				offset = range.offset;
-				annotation.text = range.text;
-			}
-		}
-		// 'note'
-		else {
-			offset = getClosestOffset(pageChs, annotation.position.rects[0]);
-		}
-
-		let top = pageHeight - annotation.position.rects[0][3];
-		if (top < 0) {
-			top = 0;
-		}
-
-		annotation.sortIndex = [
-			annotation.position.pageIndex.toString().slice(0, 5).padStart(5, '0'),
-			offset.toString().slice(0, 6).padStart(6, '0'),
-			Math.floor(top).toString().slice(0, 5).padStart(5, '0')
-		].join('|');
-
-		if (annotation.position.rects.length === 1
-			&& annotation.type === 'highlight'
-			// TODO: Consider to remove this minimal height check when range
-			//  extraction precision is increased
-			&& annotation.position.rects[0][2] - annotation.position.rects[0][0] > 20
-			&& !annotation.text) {
-			annotation.type = 'image';
-			delete annotation.text;
-		}
-	}
+	// some Mendeley annotations are incorrectly marked as highlights instead of images. Using
+	// fixTiny to convert these to images
+	await processAnnotations(annotations, pdf, cmapProvider, { fixTiny: true });
 	return annotations;
 }
+
 
 function errObject(err) {
 	return JSON.parse(JSON.stringify(err, Object.getOwnPropertyNames(err)));
@@ -607,6 +658,21 @@ if (typeof self !== 'undefined') {
 				}, []);
 			}
 		}
+		else if (message.action === 'importCitavi') {
+			try {
+				let annotations = await importCitaviAnnotations(message.data.buf, message.data.citaviAnnotations, message.data.password, cmapProvider);
+				self.postMessage({
+					responseID: message.id,
+					data: annotations
+				}, []);
+			}
+			catch (e) {
+				self.postMessage({
+					responseID: message.id,
+					error: errObject(e)
+				}, []);
+			}
+		}
 		else if (message.action === 'extractFulltext') {
 			let res;
 			try {
@@ -642,5 +708,6 @@ module.exports = {
 	extractFulltext,
 	extractStructure,
 	extractInfo,
+	importCitaviAnnotations,
 	importMendeleyAnnotations
 };
