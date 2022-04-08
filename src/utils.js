@@ -1,3 +1,5 @@
+const { distance } = require('fastest-levenshtein');
+
 exports.quadPointsToRects = function (quadPoints) {
 	let rects = [];
 	for (let j = 0; j < quadPoints.length; j += 8) {
@@ -28,4 +30,18 @@ exports.pdfDateToIso = function (str) {
 	}
 
 	return (new Date(Date.UTC(...d))).toISOString();
+};
+
+exports.normalizeText = function (text) {
+	// Decompose and remove diacritics, spaces, all types of dashes
+	return text
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f\s\x2D\u058A\u05BE\u1400\u1806\u2010-\u2015\u2E17\u2E1A\u2E3A\u2E3B\u301C\u3030\u30A0\uFE31\uFE32\uFE58\uFE63\uFF0D]/g, '')
+		.toLowerCase();
+};
+
+exports.textApproximatelyEqual = function (a, b) {
+	a = exports.normalizeText(a);
+	b = exports.normalizeText(b);
+	return distance(a, b) < a.length * 0.1;
 };

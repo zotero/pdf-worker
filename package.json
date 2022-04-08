@@ -13,6 +13,7 @@
 	"author": "Martynas Bagdonas",
 	"license": "AGPL-3.0",
 	"dependencies": {
+		"fastest-levenshtein": "^1.0.12",
 		"pako": "1.0.11"
 	},
 	"devDependencies": {

@@ -11,6 +11,7 @@ const {
 } = require('./text');
 const { Util } = require('../pdf.js/build/lib/shared/util');
 const { resizeAndFitRect } = require('./annotations/read');
+const { textApproximatelyEqual } = require('./utils');
 
 // TODO: Highlights shouldn't be allowed to be outside of page view
 
@@ -320,6 +321,12 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 			if (range) {
 				offset = range.offset;
 				annotation.text = range.text;
+
+				if (textApproximatelyEqual(annotation.comment, annotation.text)) {
+					// Note: Removing comment here might result to external item deletion/re-recreation, because
+					// annotaiton will be deduplicated at the top of this function
+					annotation.comment = '';
+				}
 			}
 		}
 		else if (['note', 'image'].includes(annotation.type)) {
