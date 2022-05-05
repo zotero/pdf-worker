@@ -367,6 +367,38 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 	return { imported, deleted };
 }
 
+async function deletePages(buf, pageIndexes, password) {
+	let pdf = new PDFAssembler();
+	await pdf.init(buf, password);
+	let structure = await pdf.getPDFStructure();
+	pageIndexes.sort().reverse();
+	for (let pageIndex of pageIndexes) {
+		delete structure['/Root']['/Pages']['/Kids'][pageIndex];
+	}
+	return pdf.assemblePdf('ArrayBuffer');
+}
+
+async function rotatePages(buf, pageIndexes, degrees, password) {
+	if (degrees % 90 !== 0 || degrees < 0) {
+		throw new Error('Invalid degrees value');
+	}
+	let pdf = new PDFAssembler();
+	await pdf.init(buf, password);
+	let structure = await pdf.getPDFStructure();
+	for (let pageIndex of pageIndexes) {
+		let rotate = structure['/Root']['/Pages']['/Kids'][pageIndex]['/Rotate'];
+		if (!rotate || rotate % 90 !== 0 || rotate < 0) {
+			rotate = 0;
+		}
+		rotate += degrees;
+		if (rotate > 360) {
+			rotate -= Math.floor(rotate / 360) * 360;
+		}
+		structure['/Root']['/Pages']['/Kids'][pageIndex]['/Rotate'] = rotate;
+	}
+	return pdf.assemblePdf('ArrayBuffer');
+}
+
 async function extractFulltext(buf, password, pagesNum, cmapProvider) {
 	let pdf = new PDFAssembler();
 	await pdf.init(buf, password);
@@ -680,6 +712,30 @@ if (typeof self !== 'undefined') {
 				}, []);
 			}
 		}
+		else if (message.action === 'deletePages') {
+			try {
+				let buf = await deletePages(message.data.buf, message.data.pageIndexes, message.data.password, 0, cmapProvider);
+				self.postMessage({ responseID: message.id, data: { buf } }, [buf]);
+			}
+			catch (e) {
+				self.postMessage({
+					responseID: message.id,
+					error: errObject(e)
+				}, []);
+			}
+		}
+		else if (message.action === 'rotatePages') {
+			try {
+				let buf = await rotatePages(message.data.buf, message.data.pageIndexes, message.data.degrees, message.data.password, 0, cmapProvider);
+				self.postMessage({ responseID: message.id, data: { buf } }, [buf]);
+			}
+			catch (e) {
+				self.postMessage({
+					responseID: message.id,
+					error: errObject(e)
+				}, []);
+			}
+		}
 		else if (message.action === 'extractFulltext') {
 			let res;
 			try {
@@ -712,6 +768,8 @@ if (typeof self !== 'undefined') {
 module.exports = {
 	writeAnnotations,
 	importAnnotations,
+	deletePages,
+	rotatePages,
 	extractFulltext,
 	extractStructure,
 	extractInfo,
