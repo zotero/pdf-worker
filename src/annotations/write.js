@@ -155,6 +155,7 @@ function annotationToRaw(annotation) {
 			'/NM': '(' + 'Zotero-' + annotation.id + ')',
 			'/Zotero:Key': '(' + annotation.id + ')',
 			'/Zotero:AuthorName': '(' + stringToRaw(annotation.authorName) + ')',
+			'/F': 4,
 			'/C': colorToRaw(annotation.color),
 			'/AP': {
 				'/N': {
@@ -216,6 +217,7 @@ function annotationToRaw(annotation) {
 			'/NM': '(' + 'Zotero-' + annotation.id + ')',
 			'/Zotero:Key': '(' + annotation.id + ')',
 			'/Zotero:AuthorName': '(' + stringToRaw(annotation.authorName) + ')',
+			'/F': 4,
 			'/AP': {
 				'/N': {
 					'/BBox': containerRect,
