@@ -367,14 +367,51 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 	return { imported, deleted };
 }
 
+function replaceReferences(node, refs, ref, visitedNodes = new Set()) {
+	if (Array.isArray(node)) {
+		visitedNodes.add(node);
+		for (let i = 0; i < node.length; i++) {
+			let child = node[i];
+			if (refs.includes(child)) {
+				node.splice(i, 1, ref);
+			}
+			else if ((typeof child === 'object' || Array.isArray(child))
+				&& !visitedNodes.has(child)) {
+				replaceReferences(child, refs, ref, visitedNodes);
+			}
+		}
+	}
+	else if (typeof node === 'object') {
+		visitedNodes.add(node);
+		for (let key in node) {
+			if (refs.includes(node[key])) {
+				node[key] = ref;
+			}
+			else if ((typeof node[key] === 'object' || Array.isArray(node[key]))
+				&& !visitedNodes.has(node[key])) {
+				replaceReferences(node[key], refs, ref, visitedNodes);
+			}
+		}
+	}
+}
+
 async function deletePages(buf, pageIndexes, password) {
 	let pdf = new PDFAssembler();
 	await pdf.init(buf, password);
 	let structure = await pdf.getPDFStructure();
-	pageIndexes.sort().reverse();
+	// Deduplicate, sort integers, reverse
+	pageIndexes = [...new Set(pageIndexes)].sort((a, b) => a - b).reverse();
+	let deletedPages = [];
 	for (let pageIndex of pageIndexes) {
-		delete structure['/Root']['/Pages']['/Kids'][pageIndex];
+		deletedPages.push(structure['/Root']['/Pages']['/Kids'][pageIndex]);
+		structure['/Root']['/Pages']['/Kids'].splice(pageIndex, 1);
 	}
+	let firstPage = structure['/Root']['/Pages']['/Kids'][0];
+	if (!firstPage) {
+		throw new Error('At least one page must remain');
+	}
+	// Replace all deleted page references with the first page reference
+	replaceReferences(structure, deletedPages, firstPage);
 	return pdf.assemblePdf('ArrayBuffer');
 }
 
