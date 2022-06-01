@@ -395,12 +395,85 @@ function replaceReferences(node, refs, ref, visitedNodes = new Set()) {
 	}
 }
 
+function regeneratePageLabels(structure, pageIndexes) {
+	if (typeof structure['/Root']['/PageLabels'] !== 'object'
+		|| !Array.isArray(structure['/Root']['/PageLabels']['/Nums'])) {
+		return;
+	}
+	// Validate page label data and create an object with key->value pairs
+	// Nums list is [index, object, index, object, …]
+	let _nums = structure['/Root']['/PageLabels']['/Nums'];
+	if (_nums.length % 2 !== 0) {
+		return;
+	}
+	let nums = {};
+	for (let i = 0; i < _nums.length - 1; i += 2) {
+		let key = _nums[i];
+		let value = _nums[i + 1];
+		if (!Number.isInteger(key) || key < 0 || typeof value !== 'object') {
+			// Invalid PageLabel data
+			return;
+		}
+		if (value['/St'] !== undefined && (!Number.isInteger(value['/St']) || value['/St'] < 1)) {
+			// Invalid start in PageLabel dictionary
+			return;
+		}
+		nums[key] = value;
+	}
+	// Generate a temporary page label list for each page number
+	let allPageDicts = [];
+	let currentIndex = 1;
+	let numPages = structure['/Root']['/Pages']['/Kids'].length;
+	let labelDict;
+	for (let i = 0; i < numPages; i++) {
+		if (i in nums) {
+			labelDict = nums[i];
+			if (labelDict['/St']) {
+				currentIndex = labelDict['/St'];
+			} else {
+				currentIndex = 1;
+			}
+		}
+		allPageDicts[i] = { '/St': currentIndex, num: 0, gen: 0 };
+		if (labelDict['/S']) {
+			allPageDicts[i]['/S'] = labelDict['/S'];
+		}
+		if (labelDict['/P']) {
+			allPageDicts[i]['/P'] = labelDict['/P'];
+		}
+		currentIndex++;
+	}
+	// Remove deleted pages from page label list
+	for (let pageIndex of pageIndexes) {
+		allPageDicts.splice(pageIndex, 1);
+	}
+	// Compact page label list to remove intermediate values that are calculated anyway
+	nums = [];
+	let prev;
+	for (let i = 0; i < allPageDicts.length; i++) {
+		let value = allPageDicts[i];
+		if (!prev
+			|| prev['/S'] !== value['/S']
+			|| prev['/P'] !== value['/P']
+			|| prev['/St'] + 1 !== value['/St']) {
+			prev = value;
+			nums.push(i);
+			nums.push(value);
+		}
+	}
+	// Set the regenerated page labels
+	structure['/Root']['/PageLabels']['/Nums'] = nums;
+}
+
 async function deletePages(buf, pageIndexes, password) {
 	let pdf = new PDFAssembler();
 	await pdf.init(buf, password);
 	let structure = await pdf.getPDFStructure();
 	// Deduplicate, sort integers, reverse
 	pageIndexes = [...new Set(pageIndexes)].sort((a, b) => a - b).reverse();
+	if (structure['/Root']['/PageLabels']) {
+		regeneratePageLabels(structure, pageIndexes);
+	}
 	let deletedPages = [];
 	for (let pageIndex of pageIndexes) {
 		deletedPages.push(structure['/Root']['/Pages']['/Kids'][pageIndex]);
