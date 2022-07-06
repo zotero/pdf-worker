@@ -288,7 +288,11 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 			pageChs = [];
 			for (let item of pageItems) {
 				for (let ch of item.chars) {
-					if (ch.rotation % 90 === 0 && ch.c !== ' ') {
+					if (ch.rotation % 90 === 0
+						&& ch.c !== ' '
+						// Sometimes char can map to null and break strings
+						&& ch.c.charCodeAt(0)
+					) {
 						pageChs.push(ch);
 					}
 				}
