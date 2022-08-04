@@ -4,6 +4,7 @@ const { readRawAnnotations } = require('./annotations/read');
 const { writeRawAnnotations } = require('./annotations/write');
 const { deleteAnnotations } = require('./annotations/delete');
 const {
+	getLines,
 	getRangeByHighlight,
 	getClosestOffset,
 	getPageLabelPoints,
@@ -300,6 +301,9 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 			pageHeight = page.view[3];
 		}
 
+		// Reverse RTL lines
+		getLines(pageChs, true);
+
 		let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
 		if (points) {
 			// annotation.pageLabel = '-';
@@ -591,6 +595,9 @@ async function processAnnotations(annotations, pdf, cmapProvider, { keepText = f
 			}
 			pageHeight = page.view[3];
 		}
+
+		// Reverse RTL lines
+		getLines(pageChs, true);
 
 		let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
 		if (points) {
