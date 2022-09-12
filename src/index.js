@@ -86,11 +86,21 @@ async function getPageChs(pageIndex, pdfDocument, cmapProvider) {
 	let page = await pdfDocument.getPage(pageIndex);
 	let pageItems = await getText(page, cmapProvider);
 
+	let fingerprints = new Set();
 	let chs = [];
 	for (let item of pageItems) {
 		for (let ch of item.chars) {
-			if (ch.rotation % 90 === 0 && ch.c !== ' ') {
-				chs.push(ch);
+			if (ch.rotation % 90 === 0
+				&& ch.c !== ' '
+				// Sometimes char can map to null and break strings
+				&& ch.c.charCodeAt(0)
+			) {
+				// Some PDF files have their text layer characters repeated many times, therefore remove them
+				let fingerprint = ch.c + ch.rect.join('');
+				if (!fingerprints.has(fingerprint)) {
+					fingerprints.add(fingerprint);
+					chs.push(ch);
+				}
 			}
 		}
 	}
@@ -279,27 +289,11 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 
 	let pageChs;
 	let pageHeight;
-	let loadedPageIndex = null;
 	for (let annotation of imported) {
 		let pageIndex = annotation.position.pageIndex;
-		if (loadedPageIndex !== pageIndex) {
-			let page = await pdfDocument.getPage(pageIndex);
-			let pageItems = await getText(page, cmapProvider);
-			loadedPageIndex = pageIndex;
-			pageChs = [];
-			for (let item of pageItems) {
-				for (let ch of item.chars) {
-					if (ch.rotation % 90 === 0
-						&& ch.c !== ' '
-						// Sometimes char can map to null and break strings
-						&& ch.c.charCodeAt(0)
-					) {
-						pageChs.push(ch);
-					}
-				}
-			}
-			pageHeight = page.view[3];
-		}
+		let page = await pdfDocument.getPage(pageIndex);
+		pageHeight = page.view[3];
+		pageChs = await getPageChs(pageIndex, pdfDocument, cmapProvider);
 
 		// Reverse RTL lines
 		getLines(pageChs, true);
@@ -575,26 +569,14 @@ async function extractStructure() {
 async function processAnnotations(annotations, pdf, cmapProvider, { keepText = false, fixTiny = false } = {}) {
 	let pageChs;
 	let pageHeight;
-	let loadedPageIndex = null;
 	const pdfDocument = pdf.pdfManager.pdfDocument;
 	annotations = splitAnnotations(annotations);
 
 	for (let annotation of annotations) {
 		let pageIndex = annotation.position.pageIndex;
-		if (loadedPageIndex !== pageIndex) {
-			let page = await pdfDocument.getPage(pageIndex);
-			let pageItems = await getText(page, cmapProvider);
-			loadedPageIndex = pageIndex;
-			pageChs = [];
-			for (let item of pageItems) {
-				for (let ch of item.chars) {
-					if (ch.rotation % 90 === 0 && ch.c !== ' ') {
-						pageChs.push(ch);
-					}
-				}
-			}
-			pageHeight = page.view[3];
-		}
+		let page = await pdfDocument.getPage(pageIndex);
+		pageHeight = page.view[3];
+		pageChs = await getPageChs(pageIndex, pdfDocument, cmapProvider);
 
 		// Reverse RTL lines
 		getLines(pageChs, true);
