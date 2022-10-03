@@ -837,6 +837,8 @@ function getLines(chars, reflowRTL) {
 
 	for (let line of lines) {
 		line.words = [];
+		// TODO: Compute word spacing threshold from more characters than just the current line i.e. current paragraph
+		//  or page or even multiple pages.
 		let wordSp = computeWordSpacingThreshold(chars.slice(line.from, line.to + 1), line.vertical);
 		for (let i = line.from; i <= line.to; i++) {
 			let sp = wordSp - 1;
@@ -863,6 +865,81 @@ function getLines(chars, reflowRTL) {
 		}
 	}
 	return lines;
+}
+
+function extractLinks(lines, chars) {
+	let spaceBefore = new Set();
+	for (let line of lines) {
+		for (let word of line.words) {
+			if (word.spaceAfter) {
+				spaceBefore.add(word.to + 1);
+			}
+		}
+	}
+
+	let sequences = [];
+	let sequence = { from: 0, to: 0, lbp: [] };
+
+	let urlBreakChars = ['&', '.', '#', '?', '/'];
+
+	for (let i = 0; i < chars.length; i++) {
+		let char = chars[i];
+		let charBefore = chars[i - 1];
+
+		if (spaceBefore.has(i)
+			|| charBefore && (
+				char.fontSize !== charBefore.fontSize
+				|| char.fontName !== charBefore.fontName
+				|| charBefore.rect[0] > char.rect[0] && (
+					charBefore.rect[1] - char.rect[3] > (char.rect[3] - char.rect[1]) / 2
+					|| !(urlBreakChars.includes(charBefore.c) || urlBreakChars.includes(char.c))
+				)
+			)
+		) {
+			sequences.push(sequence);
+			sequence = { from: i, to: i };
+		}
+		else {
+			sequence.to = i;
+		}
+	}
+
+	if (sequence.from !== sequence.to) {
+		sequences.push(sequence);
+	}
+
+	let links = [];
+
+	let urlRegExp = new RegExp(/(https?:\/\/|www\.|10\.)[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&\/\/=]*)/);
+	let doiRegExp = new RegExp(/10(?:\.[0-9]{4,})?\/[^\s]*[^\s\.,]/);
+
+	for (let sequence of sequences) {
+		let text = '';
+		for (let j = sequence.from; j <= sequence.to; j++) {
+			let char = chars[j];
+			text += char.c;
+		}
+		let match = text.match(urlRegExp);
+		if (match) {
+			let url = match[0];
+			if (url.includes('@')) {
+				continue;
+			}
+			url = url.replace(/[.)]*$/, '');
+			let from = sequence.from + match.index;
+			let to = from + url.length;
+			links.push({ from, to, url });
+		}
+		match = text.match(doiRegExp);
+		if (match) {
+			let from = sequence.from + match.index;
+			let to = from + match[0].length;
+			let url = 'https://doi.org/' + encodeURIComponent(match[0]);
+			links.push({ from, to, text: match[0], url });
+			continue;
+		}
+	}
+	return links;
 }
 
 function isDash(c) {
@@ -1149,7 +1226,8 @@ function getClosestLine(chars, rect) {
 // 	getNextLineClosestOffset,
 // 	getPrevLineClosestOffset,
 // 	getClosestWord,
-// 	getClosestLine
+// 	getClosestLine,
+// 	extractLinks
 // };
 
 module.exports = {
