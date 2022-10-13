@@ -16,9 +16,10 @@ exports.deleteAnnotations = function (structure) {
 		let transferableRawAnnots = rawPage['/Annots'].filter(rawAnnot => isTransferable(rawAnnot));
 		rawPage['/Annots'] = rawPage['/Annots'].filter(x => !transferableRawAnnots.includes(x));
 
-		// Filter out popups that have a deleted parent annotation
-		rawPage['/Annots'].filter(annot => annot['/Subtype'] !== '/Popup'
-			|| transferableRawAnnots.includes(annot['/Parent']));
+		// Delete Popup annotations that have a parent annotation that is being transferred
+		rawPage['/Annots'] = rawPage['/Annots'].filter(annot =>
+			!(annot['/Subtype'] === '/Popup' && transferableRawAnnots.includes(annot['/Parent']))
+		);
 
 		if (!rawPage['/Annots'].length) {
 			delete rawPage['/Annots'];
