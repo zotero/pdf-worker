@@ -437,10 +437,12 @@ function regeneratePageLabels(structure, pageIndexes) {
 			}
 		}
 		allPageDicts[i] = { '/St': currentIndex, num: 0, gen: 0 };
-		if (labelDict['/S']) {
+		// Some PDFs don't include page label dictionary for page index 0,
+		// this is not allowed by the PDF specification, so just make sure we don't crash
+		if (labelDict && labelDict['/S']) {
 			allPageDicts[i]['/S'] = labelDict['/S'];
 		}
-		if (labelDict['/P']) {
+		if (labelDict && labelDict['/P']) {
 			allPageDicts[i]['/P'] = labelDict['/P'];
 		}
 		currentIndex++;
