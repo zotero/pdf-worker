@@ -26,13 +26,77 @@
 
 const { LocalPdfManager } = require('../pdf.js/build/lib/core/pdf_manager');
 const { Dict, Name, Ref } = require('../pdf.js/build/lib/core/primitives');
-const {
-	DecodeStream, Stream, FlateStream, PredictorStream, DecryptStream,
-	Ascii85Stream, RunLengthStream, LZWStream
-} = require('../pdf.js/build/lib/core/stream');
+
+const { BaseStream } = require('../pdf.js/build/lib/core/base_stream.js');
+const { Ascii85Stream } = require('../pdf.js/build/lib/core/ascii_85_stream.js');
+const { AsciiHexStream } = require('../pdf.js/build/lib/core/ascii_hex_stream.js');
+const { CCITTFaxStream } = require('../pdf.js/build/lib/core/ccitt_stream.js');
+const { FlateStream } = require('../pdf.js/build/lib/core/flate_stream.js');
+const { Jbig2Stream } = require('../pdf.js/build/lib/core/jbig2_stream.js');
+const { JpegStream } = require('../pdf.js/build/lib/core/jpeg_stream.js');
+const { JpxStream } = require('../pdf.js/build/lib/core/jpx_stream.js');
+const { LZWStream } = require('../pdf.js/build/lib/core/lzw_stream.js');
+const { NullStream, Stream } = require('../pdf.js/build/lib/core/stream.js');
+const { PredictorStream } = require('../pdf.js/build/lib/core/predictor_stream.js');
+const { RunLengthStream } = require('../pdf.js/build/lib/core/run_length_stream.js');
+const { DecodeStream } = require('../pdf.js/build/lib/core/decode_stream.js');
+const { DecryptStream } = require('../pdf.js/build/lib/core/decrypt_stream.js');
+
 const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
-const { arraysToBytes, bytesToString } = require('../pdf.js/build/lib/shared/util');
+const { bytesToString, stringToBytes } = require('../pdf.js/build/lib/shared/util.js');
 const { deflate } = require('pako');
+
+
+
+/**
+ * Gets length of the array (Array, Uint8Array, or string) in bytes.
+ * @param {Array<any>|Uint8Array|string} arr
+ * @returns {number}
+ */
+// eslint-disable-next-line consistent-return
+function arrayByteLength(arr) {
+	if (arr.length !== undefined) {
+		return arr.length;
+	}
+	if (arr.byteLength !== undefined) {
+		return arr.byteLength;
+	}
+	throw new Error("Invalid argument for arrayByteLength");
+}
+
+/**
+ * Combines array items (arrays) into single Uint8Array object.
+ * @param {Array<Array<any>|Uint8Array|string>} arr - the array of the arrays
+ *   (Array, Uint8Array, or string).
+ * @returns {Uint8Array}
+ */
+function arraysToBytes(arr) {
+	const length = arr.length;
+	// Shortcut: if first and only item is Uint8Array, return it.
+	if (length === 1 && arr[0] instanceof Uint8Array) {
+		return arr[0];
+	}
+	let resultLength = 0;
+	for (let i = 0; i < length; i++) {
+		resultLength += arrayByteLength(arr[i]);
+	}
+	let pos = 0;
+	const data = new Uint8Array(resultLength);
+	for (let i = 0; i < length; i++) {
+		let item = arr[i];
+		if (!(item instanceof Uint8Array)) {
+			if (typeof item === "string") {
+				item = stringToBytes(item);
+			} else {
+				item = new Uint8Array(item);
+			}
+		}
+		const itemLength = item.byteLength;
+		data.set(item, pos);
+		pos += itemLength;
+	}
+	return data;
+}
 
 class PDFAssembler {
 	constructor() {
@@ -61,7 +125,12 @@ class PDFAssembler {
 		if (typeof inputData === 'object') {
 			if (inputData instanceof ArrayBuffer || inputData instanceof Uint8Array) {
 				let arrayBuffer = await this.toArrayBuffer(inputData);
-				this.pdfManager = new LocalPdfManager(1, arrayBuffer, userPassword, {}, '');
+				const pdfManagerArgs = {
+					source: arrayBuffer,
+					evaluatorOptions: {},
+					password: userPassword
+				};
+				this.pdfManager = new LocalPdfManager(pdfManagerArgs);
 				await this.pdfManager.ensureDoc('checkHeader', []);
 				await this.pdfManager.ensureDoc('parseStartXRef', []);
 				// Enter into recovery mode if the initial parse fails
