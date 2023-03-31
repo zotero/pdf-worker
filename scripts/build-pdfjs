@@ -3,6 +3,6 @@ cd pdf.js
 npm ci
 npx gulp lib
 cd ..
-
 mkdir -p build/cmaps
-cp -r pdf.js/external/bcmaps/*.bcmap build/cmaps/
+rsync -av --recursive --exclude='.*' pdf.js/external/bcmaps/ build/cmaps/
+rsync -av --recursive --exclude='.*'  pdf.js/external/standard_fonts/ build/standard_fonts/

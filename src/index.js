@@ -1,5 +1,4 @@
 const PDFAssembler = require('./pdfassembler');
-const { getInfo } = require('./pdfinfo');
 const { readRawAnnotations } = require('./annotations/read');
 const { writeRawAnnotations } = require('./annotations/write');
 const { deleteAnnotations } = require('./annotations/delete');
@@ -13,48 +12,26 @@ const {
 const { Util } = require('../pdf.js/build/lib/shared/util');
 const { resizeAndFitRect } = require('./annotations/read');
 const { textApproximatelyEqual } = require('./utils');
+const { LocalPdfManager } = require('../pdf.js/build/lib/core/pdf_manager');
+const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
 
 // TODO: Highlights shouldn't be allowed to be outside of page view
 
-async function getText(page, cmapProvider) {
+async function getText(page, cmapProvider, standardFontProvider) {
 	let handler = {};
-	handler.send = function (z, b) {
-	};
+	handler.send = function () {};
 
-	class fakeReader {
-		constructor(op, data) {
-			this.op = op;
-			this.data = data;
-			this.called = false;
-		}
-
-		async read() {
-			if (this.op !== 'FetchBuiltInCMap') return;
-
-			if (this.called) {
-				return { done: true };
-			}
-
-			this.called = true;
-			return {
-				value: await cmapProvider(this.data.name)
-			};
-		}
-	}
-
-	handler.sendWithStream = function (op, data, sink) {
+	handler.sendWithPromise = async function (op, data) {
 		if (op === 'FetchBuiltInCMap') {
-			return {
-				getReader() {
-					return new fakeReader(op, data);
-				}
-			};
+			return cmapProvider(data.name);
+		}
+		else if (op === 'FetchStandardFontData') {
+			return standardFontProvider(data.filename);
 		}
 	};
 
 	let task = {
-		ensureNotTerminated() {
-		}
+		ensureNotTerminated() {}
 	};
 
 	let items = [];
@@ -75,7 +52,22 @@ async function getText(page, cmapProvider) {
 	return items;
 }
 
-async function getPageChs(pageIndex, pdfDocument, cmapProvider) {
+async function getStructuredText(page, cmapProvider, standardFontProvider, data = {}) {
+	let handler = {};
+	handler.send = function () {};
+	handler.sendWithPromise = async function (op, data) {
+		if (op === 'FetchBuiltInCMap') {
+			return cmapProvider(data.name);
+		}
+		else if (op === 'FetchStandardFontData') {
+			return standardFontProvider(data.filename);
+		}
+	};
+	let task = { ensureNotTerminated() {} };
+	return page.getStructuredText({ handler, task, data });
+}
+
+async function getPageChs(pageIndex, pdfDocument, cmapProvider, standardFontProvider) {
 	if (!pdfDocument.chsCache) {
 		pdfDocument.chsCache = {};
 	}
@@ -84,7 +76,7 @@ async function getPageChs(pageIndex, pdfDocument, cmapProvider) {
 	}
 
 	let page = await pdfDocument.getPage(pageIndex);
-	let pageItems = await getText(page, cmapProvider);
+	let pageItems = await getText(page, cmapProvider, standardFontProvider);
 
 	let fingerprints = new Set();
 	let chs = [];
@@ -109,13 +101,13 @@ async function getPageChs(pageIndex, pdfDocument, cmapProvider) {
 	return chs;
 }
 
-async function extractPageLabelPoints(pdfDocument, cmapProvider) {
+async function extractPageLabelPoints(pdfDocument, cmapProvider, standardFontProvider) {
 	for (let i = 0; i < 5 && i + 3 < pdfDocument.numPages; i++) {
 		let pageHeight = (await pdfDocument.getPage(i + 1)).view[3];
-		let chs1 = await getPageChs(i, pdfDocument, cmapProvider);
-		let chs2 = await getPageChs(i + 1, pdfDocument, cmapProvider);
-		let chs3 = await getPageChs(i + 2, pdfDocument, cmapProvider);
-		let chs4 = await getPageChs(i + 3, pdfDocument, cmapProvider);
+		let chs1 = await getPageChs(i, pdfDocument, cmapProvider, standardFontProvider);
+		let chs2 = await getPageChs(i + 1, pdfDocument, cmapProvider, standardFontProvider);
+		let chs3 = await getPageChs(i + 2, pdfDocument, cmapProvider, standardFontProvider);
+		let chs4 = await getPageChs(i + 3, pdfDocument, cmapProvider, standardFontProvider);
 		let res = await getPageLabelPoints(i, chs1, chs2, chs3, chs4, pageHeight);
 		if (res) {
 			return res;
@@ -124,15 +116,15 @@ async function extractPageLabelPoints(pdfDocument, cmapProvider) {
 	return null;
 }
 
-async function extractPageLabel(pageIndex, points, pdfDocument, cmapProvider) {
+async function extractPageLabel(pageIndex, points, pdfDocument, cmapProvider, standardFontProvider) {
 	let chsPrev, chsCur, chsNext;
 	if (pageIndex > 0) {
-		chsPrev = await getPageChs(pageIndex - 1, pdfDocument, cmapProvider);
+		chsPrev = await getPageChs(pageIndex - 1, pdfDocument, cmapProvider, standardFontProvider);
 	}
-	chsCur = await getPageChs(pageIndex, pdfDocument, cmapProvider);
+	chsCur = await getPageChs(pageIndex, pdfDocument, cmapProvider, standardFontProvider);
 
 	if (pageIndex < pdfDocument.numPages - 1) {
-		chsNext = await getPageChs(pageIndex + 1, pdfDocument, cmapProvider);
+		chsNext = await getPageChs(pageIndex + 1, pdfDocument, cmapProvider, standardFontProvider);
 	}
 	return getPageLabel(pageIndex, chsPrev, chsCur, chsNext, points);
 }
@@ -266,7 +258,7 @@ function splitAnnotations(annotations) {
 	return splitAnnotations;
 }
 
-async function importAnnotations(buf, existingAnnotations, password, transfer, cmapProvider) {
+async function importAnnotations(buf, existingAnnotations, password, transfer, cmapProvider, standardFontProvider) {
 	let pdf = new PDFAssembler();
 	await pdf.init(buf, password);
 	let pdfDocument = pdf.pdfManager.pdfDocument;
@@ -293,15 +285,15 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 		let pageIndex = annotation.position.pageIndex;
 		let page = await pdfDocument.getPage(pageIndex);
 		pageHeight = page.view[3];
-		pageChs = await getPageChs(pageIndex, pdfDocument, cmapProvider);
+		pageChs = await getPageChs(pageIndex, pdfDocument, cmapProvider, standardFontProvider);
 
 		// Reverse RTL lines
 		getLines(pageChs, true);
 
-		let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
+		let points = await extractPageLabelPoints(pdfDocument, cmapProvider, standardFontProvider);
 		if (points) {
 			// annotation.pageLabel = '-';
-			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider);
+			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider, standardFontProvider);
 			if (pageLabel) {
 				annotation.pageLabel = pageLabel;
 			}
@@ -326,7 +318,7 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 
 				if (textApproximatelyEqual(annotation.comment, annotation.text)) {
 					// Note: Removing comment here might result to external item deletion/re-recreation, because
-					// annotaiton will be deduplicated at the top of this function
+					// annotation will be deduplicated at the top of this function
 					annotation.comment = '';
 				}
 			}
@@ -513,33 +505,180 @@ async function rotatePages(buf, pageIndexes, degrees, password) {
 	return pdf.assemblePdf('ArrayBuffer');
 }
 
-async function extractFulltext(buf, password, pagesNum, cmapProvider) {
-	let pdf = new PDFAssembler();
-	await pdf.init(buf, password);
+async function getPdfManager(arrayBuffer, recoveryMode) {
+	const pdfManagerArgs = {
+		source: arrayBuffer,
+		evaluatorOptions: {
+			cMapUrl: null,
+			standardFontDataUrl: null
+		},
+		password: ''
+	};
+	let pdfManager = new LocalPdfManager(pdfManagerArgs);
+	await pdfManager.ensureDoc('checkHeader', []);
+	await pdfManager.ensureDoc('parseStartXRef', []);
+	// Enter into recovery mode if the initial parse fails
+	try {
+		await pdfManager.ensureDoc('parse', [recoveryMode]);
+	}
+	catch (e) {
+		if (!(e instanceof XRefParseException) && !recoveryMode) {
+			throw e;
+		}
+		recoveryMode = true;
+		await pdfManager.ensureDoc('parse', [recoveryMode]);
+	}
+	await pdfManager.ensureDoc('numPages');
+	await pdfManager.ensureDoc('fingerprint');
+	return pdfManager;
+}
 
-	let fulltext = [];
-
-	let actualCount = pdf.pdfManager.pdfDocument.numPages;
-
-	if (!pagesNum || pagesNum > actualCount) {
+async function getFulltext(buf, password, pagesNum, cmapProvider, standardFontProvider) {
+	let pdfManager = await getPdfManager(buf);
+	let actualCount = pdfManager.pdfDocument.numPages;
+	if (!Number.isInteger(pagesNum) || pagesNum > actualCount) {
 		pagesNum = actualCount;
 	}
-
+	let text = [];
 	let pageIndex = 0;
 	for (; pageIndex < pagesNum; pageIndex++) {
-		let page = await pdf.pdfManager.pdfDocument.getPage(pageIndex);
-		let pageItems = await getText(page, cmapProvider);
-		let text = pageItems.map(x => x.str).join(' ');
-		fulltext += text + '\n\n';
+		let page = await pdfManager.pdfDocument.getPage(pageIndex);
+		let { paragraphs } = await getStructuredText(page, cmapProvider, standardFontProvider)
+		for (let paragraph of paragraphs) {
+			for (let line of paragraph.lines) {
+				for (let word of line.words) {
+					for (let char of word.chars) {
+						text.push(char.c);
+					}
+					if (word.spaceAfter) {
+						text.push(' ');
+					}
+				}
+				if (line !== paragraph.lines.at(-1)) {
+					if (line.hyphenated) {
+						text.pop();
+					}
+					else {
+						text.push(' ');
+					}
+				}
+			}
+			if (paragraph !== paragraphs.at(-1)) {
+				text.push('\n');
+			}
+		}
+		text.push('\n\n\f');
 	}
-
+	text = text.join('');
 	return {
-		text: fulltext,
-		pages: pageIndex
+		text,
+		extractedPages: pageIndex,
+		totalPages: actualCount
 	};
 }
 
-async function extractStructure() {
+async function getRecognizerData(buf, password, cmapProvider, standardFontProvider) {
+	let round = n => Math.round(n * 10000) / 10000;
+
+	let pdfManager = await getPdfManager(buf);
+
+	let totalPages = pdfManager.pdfDocument.numPages;
+
+	let maxPages = 5;
+	if (!Number.isInteger(maxPages) || maxPages > totalPages) {
+		maxPages = totalPages;
+	}
+
+	let metadata = {};
+	for (let key in pdfManager.pdfDocument.documentInfo) {
+		if (key === 'PDFFormatVersion') {
+			continue;
+		}
+		let value = pdfManager.pdfDocument.documentInfo[key];
+		if (typeof value === 'string') {
+			metadata[key] = value;
+		}
+		else if (typeof value === 'object' && key === 'Custom') {
+			for (let key2 in value) {
+				let value2 = value[key2];
+				if (typeof value2 === 'string') {
+					metadata[key2] = value2;
+				}
+			}
+		}
+	}
+
+	let data = { metadata, totalPages, pages: [] };
+	let pageIndex = 0;
+	for (; pageIndex < maxPages; pageIndex++) {
+		let page = await pdfManager.pdfDocument.getPage(pageIndex);
+		let pageWidth = page.view[2];
+		let pageHeight = page.view[3];
+
+		let fonts = [];
+
+		let { paragraphs } = await getStructuredText(page, cmapProvider, standardFontProvider);
+
+		let newLines = [];
+
+		for (let paragraph of paragraphs) {
+			for (let line of paragraph.lines) {
+				let newLine = [];
+				for (let word of line.words) {
+					let [xMin, yMin, xMax, yMax] = word.rect;
+					xMin = round(word.rect[0]);
+					xMax = round(word.rect[2]);
+					yMin = round(pageHeight - word.rect[3]);
+					yMax = round(pageHeight - word.rect[1]);
+
+					let char = word.chars[0];
+
+					let fontIndex = fonts.indexOf(char.fontName);
+					if (fontIndex === -1) {
+						fonts.push(char.fontName);
+						fontIndex = fonts.length - 1;
+					}
+
+					let fontSize = round(char.fontSize);
+					let spaceAfter = word.spaceAfter ? 1 : 0;
+					let baseline = round(char.rotation === 0 ? round(pageHeight - char.baseline) : char.baseline);
+					let rotation = 0;
+					let underlined = 0;
+					let bold = char.bold ? 1 : 0;
+					let italic = char.italic ? 1 : 0;
+					let colorIndex = 0;
+					let text = word.chars.map(x => x.u).join('');
+
+					newLine.push([
+						xMin,
+						yMin,
+						xMax,
+						yMax,
+						fontSize,
+						spaceAfter,
+						baseline,
+						rotation,
+						underlined,
+						bold,
+						italic,
+						colorIndex,
+						fontIndex,
+						text
+					]);
+				}
+				if (newLine.length) {
+					newLines.push([newLine]);
+				}
+			}
+		}
+
+
+		data.pages.push([pageWidth, pageHeight, [[[[0, 0, 0, 0, newLines]]]]]);
+	}
+	return data;
+}
+
+async function getStructure() {
 
 }
 
@@ -557,7 +696,8 @@ async function extractStructure() {
  *
  * @param      {Array}    annotations            Array of annotation
  * @param      {Object}   pdf                    PDF document API
- * @param      {Object}   cmapProvider           cmap provider
+ * @param      {Object}   cmapProvider           CMap provider
+ * @param      {Object}   standardFontProvider   Standard font provider
  * @param      {Object}   [arg4={}]              Additional configuration
  * @param      {boolean}  [arg4.keepText=false]  Whether to keep text from
  *                                               annotation object rather than
@@ -568,7 +708,7 @@ async function extractStructure() {
  * @return     {Promise}  Promise resolves with no value once all annotations
  *                        have been processed (inline).
  */
-async function processAnnotations(annotations, pdf, cmapProvider, { keepText = false, fixTiny = false } = {}) {
+async function processAnnotations(annotations, pdf, cmapProvider, standardFontProvider, { keepText = false, fixTiny = false } = {}) {
 	let pageChs;
 	let pageHeight;
 	const pdfDocument = pdf.pdfManager.pdfDocument;
@@ -578,16 +718,16 @@ async function processAnnotations(annotations, pdf, cmapProvider, { keepText = f
 		let pageIndex = annotation.position.pageIndex;
 		let page = await pdfDocument.getPage(pageIndex);
 		pageHeight = page.view[3];
-		pageChs = await getPageChs(pageIndex, pdfDocument, cmapProvider);
+		pageChs = await getPageChs(pageIndex, pdfDocument, cmapProvider, standardFontProvider);
 
 		// Reverse RTL lines
 		getLines(pageChs, true);
 
-		let points = await extractPageLabelPoints(pdfDocument, cmapProvider);
+		let points = await extractPageLabelPoints(pdfDocument, cmapProvider, standardFontProvider);
 		if (points) {
 			// annotation.pageLabel = '-';
 			// TODO: Improve extractPageLabel
-			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider);
+			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider, standardFontProvider);
 			if (pageLabel) {
 				annotation.pageLabel = pageLabel;
 			}
@@ -640,7 +780,7 @@ async function processAnnotations(annotations, pdf, cmapProvider, { keepText = f
 	}
 }
 
-async function importCitaviAnnotations(buf, citaviAnnotations, password, cmapProvider) {
+async function importCitaviAnnotations(buf, citaviAnnotations, password, cmapProvider, standardFontProvider) {
 	const pdf = new PDFAssembler();
 	await pdf.init(buf, password);
 	const annotations = citaviAnnotations.map(
@@ -653,11 +793,11 @@ async function importCitaviAnnotations(buf, citaviAnnotations, password, cmapPro
 		})
 	);
 	// Citavi annotations come with "text" field correctly pre-populated hence keepText: true
-	await processAnnotations(annotations, pdf, cmapProvider, { keepText: true });
+	await processAnnotations(annotations, pdf, cmapProvider, standardFontProvider, { keepText: true });
 	return annotations;
 }
 
-async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cmapProvider) {
+async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cmapProvider, standardFontProvider) {
 	let pdf = new PDFAssembler();
 	await pdf.init(buf, password);
 	let pdfDocument = pdf.pdfManager.pdfDocument;
@@ -718,7 +858,7 @@ async function importMendeleyAnnotations(buf, mendeleyAnnotations, password, cma
 
 	// some Mendeley annotations are incorrectly marked as highlights instead of images. Using
 	// fixTiny to convert these to images
-	await processAnnotations(annotations, pdf, cmapProvider, { fixTiny: true });
+	await processAnnotations(annotations, pdf, cmapProvider, standardFontProvider, { fixTiny: true });
 	return annotations;
 }
 
@@ -727,8 +867,24 @@ function errObject(err) {
 	return JSON.parse(JSON.stringify(err, Object.getOwnPropertyNames(err)));
 }
 
-async function extractInfo(buf, password) {
-	return getInfo(buf, password);
+let cmapCache = {};
+async function cmapProvider(name) {
+	if (cmapCache[name]) {
+		return cmapCache[name];
+	}
+	let data = await query('FetchBuiltInCMap', name);
+	cmapCache[name] = data;
+	return data;
+}
+
+let fontCache = {};
+async function standardFontProvider(filename) {
+	if (fontCache[filename]) {
+		return fontCache[filename];
+	}
+	let data = await query('FetchStandardFontData', filename);
+	fontCache[filename] = data;
+	return data;
 }
 
 if (typeof self !== 'undefined') {
@@ -754,12 +910,6 @@ if (typeof self !== 'undefined') {
 			return;
 		}
 
-		// console.log('Received message', e.data);
-
-		async function cmapProvider(name) {
-			return query('FetchBuiltInCMap', name);
-		}
-
 		if (message.action === 'export') {
 			let buf;
 			try {
@@ -777,7 +927,14 @@ if (typeof self !== 'undefined') {
 		else if (message.action === 'import') {
 			try {
 				let { buf, existingAnnotations, password, transfer } = message.data;
-				let data = await importAnnotations(buf, existingAnnotations, password, transfer, cmapProvider);
+				let data = await importAnnotations(
+					buf,
+					existingAnnotations,
+					password,
+					transfer,
+					cmapProvider,
+					standardFontProvider
+				);
 				self.postMessage({ responseID: message.id, data }, data.buf ? [data.buf] : []);
 			}
 			catch (e) {
@@ -789,7 +946,13 @@ if (typeof self !== 'undefined') {
 		}
 		else if (message.action === 'importMendeley') {
 			try {
-				let annotations = await importMendeleyAnnotations(message.data.buf, message.data.mendeleyAnnotations, message.data.password, cmapProvider);
+				let annotations = await importMendeleyAnnotations(
+					message.data.buf,
+					message.data.mendeleyAnnotations,
+					message.data.password,
+					cmapProvider,
+					standardFontProvider
+				);
 				self.postMessage({
 					responseID: message.id,
 					data: annotations
@@ -804,7 +967,13 @@ if (typeof self !== 'undefined') {
 		}
 		else if (message.action === 'importCitavi') {
 			try {
-				let annotations = await importCitaviAnnotations(message.data.buf, message.data.citaviAnnotations, message.data.password, cmapProvider);
+				let annotations = await importCitaviAnnotations(
+					message.data.buf,
+					message.data.citaviAnnotations,
+					message.data.password,
+					cmapProvider,
+					standardFontProvider
+				);
 				self.postMessage({
 					responseID: message.id,
 					data: annotations
@@ -819,7 +988,7 @@ if (typeof self !== 'undefined') {
 		}
 		else if (message.action === 'deletePages') {
 			try {
-				let buf = await deletePages(message.data.buf, message.data.pageIndexes, message.data.password, 0, cmapProvider);
+				let buf = await deletePages(message.data.buf, message.data.pageIndexes, message.data.password);
 				self.postMessage({ responseID: message.id, data: { buf } }, [buf]);
 			}
 			catch (e) {
@@ -831,7 +1000,12 @@ if (typeof self !== 'undefined') {
 		}
 		else if (message.action === 'rotatePages') {
 			try {
-				let buf = await rotatePages(message.data.buf, message.data.pageIndexes, message.data.degrees, message.data.password, 0, cmapProvider);
+				let buf = await rotatePages(
+					message.data.buf,
+					message.data.pageIndexes,
+					message.data.degrees,
+					message.data.password
+				);
 				self.postMessage({ responseID: message.id, data: { buf } }, [buf]);
 			}
 			catch (e) {
@@ -841,11 +1015,16 @@ if (typeof self !== 'undefined') {
 				}, []);
 			}
 		}
-		else if (message.action === 'extractFulltext') {
-			let res;
+		else if (message.action === 'getFulltext') {
 			try {
-				res = await extractFulltext(message.data.buf, message.data.password, 0, cmapProvider);
-				self.postMessage({ responseID: message.id, data: res }, []);
+				let data = await getFulltext(
+					message.data.buf,
+					message.data.password,
+					message.data.maxPages,
+					cmapProvider,
+					standardFontProvider
+				);
+				self.postMessage({ responseID: message.id, data }, []);
 			}
 			catch (e) {
 				self.postMessage({
@@ -854,11 +1033,15 @@ if (typeof self !== 'undefined') {
 				}, []);
 			}
 		}
-		else if (message.action === 'getInfo') {
-			let res;
+		else if (message.action === 'getRecognizerData') {
 			try {
-				res = await extractInfo(message.data.buf, message.data.password);
-				self.postMessage({ responseID: message.id, data: res }, []);
+				let data = await getRecognizerData(
+					message.data.buf,
+					message.data.password,
+					cmapProvider,
+					standardFontProvider
+				);
+				self.postMessage({ responseID: message.id, data }, []);
 			}
 			catch (e) {
 				self.postMessage({
@@ -875,9 +1058,9 @@ module.exports = {
 	importAnnotations,
 	deletePages,
 	rotatePages,
-	extractFulltext,
-	extractStructure,
-	extractInfo,
+	getFulltext,
+	getStructure,
+	getRecognizerData,
 	importCitaviAnnotations,
 	importMendeleyAnnotations
 };

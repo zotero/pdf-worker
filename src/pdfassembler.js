@@ -127,7 +127,10 @@ class PDFAssembler {
 				let arrayBuffer = await this.toArrayBuffer(inputData);
 				const pdfManagerArgs = {
 					source: arrayBuffer,
-					evaluatorOptions: {},
+					evaluatorOptions: {
+						cMapUrl: null,
+						standardFontDataUrl: null
+					},
 					password: userPassword
 				};
 				this.pdfManager = new LocalPdfManager(pdfManagerArgs);
