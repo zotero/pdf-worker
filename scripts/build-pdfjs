@@ -1,6 +1,7 @@
 #!/bin/bash
 cd pdf.js
-npm ci
+# TEMP: Use --force because of https://github.com/mozilla/pdf.js/issues/15429#issuecomment-1278856773
+npm ci --force
 npx gulp lib
 cd ..
 mkdir -p build/cmaps
