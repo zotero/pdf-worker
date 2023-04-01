@@ -12,7 +12,7 @@ jobs:
       - name: Install Node
         uses: actions/setup-node@v2
         with:
-          node-version: 16
+          node-version: 18
 
       - name: Cache Node modules
         id: node-cache
@@ -27,6 +27,9 @@ jobs:
 
       - name: Build pdf-worker
         run: npm run build
+        # Currently necessary for Webpack: https://stackoverflow.com/a/69746937
+        env:
+          NODE_OPTIONS: --openssl-legacy-provider
 
       - name: Upload pre-build ZIP
         if: |
