@@ -567,7 +567,10 @@ async function getFulltext(buf, password, pagesNum, cmapProvider, standardFontPr
 				text.push('\n');
 			}
 		}
-		text.push('\n\n\f');
+		text.push('\n\n');
+		if (pageIndex !== pagesNum - 1) {
+			text.push('\f');
+		}
 	}
 	text = text.join('');
 	return {
