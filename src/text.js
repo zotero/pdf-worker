@@ -135,7 +135,7 @@ function getRange(structuredText, anchorOffset, headOffset) {
 	}
 
 	// Get text
-	let text = '';
+	let text = [];
 	let extracting = false;
 
 	let { paragraphs } = structuredText;
@@ -150,7 +150,7 @@ function getRange(structuredText, anchorOffset, headOffset) {
 						extracting = true;
 					}
 					if (extracting) {
-						text += char.c;
+						text.push(char.c);
 					}
 					if (n === charEnd) {
 						break loop1;
@@ -158,12 +158,20 @@ function getRange(structuredText, anchorOffset, headOffset) {
 					n++;
 				}
 				if (extracting && word.spaceAfter) {
-					text += ' ';
+					text.push(' ');
+				}
+			}
+			if (line !== paragraph.lines.at(-1)) {
+				if (line.hyphenated) {
+					text.pop();
+				}
+				else {
+					text.push(' ');
 				}
 			}
 		}
 	}
-	text = text.trim();
+	text = text.join('').trim();
 	// Get rects
 	extracting = false;
 	let rects = [];

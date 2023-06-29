@@ -603,7 +603,7 @@ async function processAnnotations(annotations, pdf, cmapProvider, standardFontPr
 
 		let offset = 0;
 		if (annotation.type === 'highlight') {
-			let range = getRangeByHighlight(chars, annotation.position.rects);
+			let range = getRangeByHighlight(structuredText, annotation.position.rects);
 			if (range) {
 				offset = range.offset;
 				annotation.text = (keepText && annotation.text) ? annotation.text : range.text;
