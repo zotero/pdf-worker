@@ -4,31 +4,30 @@
 	"description": "A PDF toolkit that runs on Node.js and Web Worker",
 	"main": "",
 	"scripts": {
-		"build": "run-s build:pdf.js build:worker",
+		"build": "npm run build:pdf.js && npm run build:worker",
 		"build:pdf.js": "sh scripts/build-pdfjs",
-		"build:worker": "cross-env NODE_ENV=production webpack --display-modules",
-		"devel:worker": "webpack --display-modules",
-		"test": "cross-env NODE_ENV=test ./node_modules/mocha/bin/mocha"
+		"build:worker": "webpack --mode production",
+		"devel:worker": "webpack --mode development",
+		"test": "npx mocha"
 	},
 	"author": "Martynas Bagdonas",
 	"license": "AGPL-3.0",
 	"dependencies": {
-		"fastest-levenshtein": "^1.0.12",
-		"pako": "1.0.11"
+		"fastest-levenshtein": "^1.0.16",
+		"pako": "2.1.0"
 	},
 	"devDependencies": {
-		"@babel/core": "^7.12.16",
-		"@babel/eslint-parser": "^7.12.16",
-		"@babel/plugin-proposal-class-properties": "^7.12.13",
-		"@babel/plugin-proposal-object-rest-spread": "^7.12.13",
-		"@zotero/eslint-config": "^1.0.6",
+		"@babel/core": "^7.22.5",
+		"@babel/eslint-parser": "^7.22.5",
+		"@babel/plugin-proposal-class-properties": "^7.18.6",
+		"@babel/plugin-proposal-object-rest-spread": "^7.20.7",
+		"@zotero/eslint-config": "^1.0.7",
 		"babel-plugin-transform-es2015-modules-commonjs": "^6.26.2",
-		"chai": "^4.2.0",
-		"cross-env": "^7.0.3",
-		"eslint": "^7.20.0",
-		"mocha": "^7.0.1",
+		"chai": "^4.3.7",
+		"eslint": "^8.43.0",
+		"mocha": "^10.2.0",
 		"npm-run-all": "^4.1.5",
-		"webpack": "^4.41.5",
-		"webpack-cli": "^3.3.10"
+		"webpack": "^5.88.1",
+		"webpack-cli": "^5.1.4"
 	}
 }
