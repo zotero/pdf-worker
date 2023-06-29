@@ -2,13 +2,7 @@ const PDFAssembler = require('./pdfassembler');
 const { readRawAnnotations } = require('./annotations/read');
 const { writeRawAnnotations } = require('./annotations/write');
 const { deleteAnnotations } = require('./annotations/delete');
-const {
-	getLines,
-	getRangeByHighlight,
-	getClosestOffset,
-	getPageLabelPoints,
-	getPageLabel
-} = require('./text');
+const { getRangeByHighlight, getClosestOffset, flattenChars } = require('./text');
 const { Util } = require('../pdf.js/build/lib/shared/util');
 const { resizeAndFitRect } = require('./annotations/read');
 const { textApproximatelyEqual } = require('./utils');
@@ -17,42 +11,7 @@ const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
 
 // TODO: Highlights shouldn't be allowed to be outside of page view
 
-async function getText(page, cmapProvider, standardFontProvider) {
-	let handler = {};
-	handler.send = function () {};
-
-	handler.sendWithPromise = async function (op, data) {
-		if (op === 'FetchBuiltInCMap') {
-			return cmapProvider(data.name);
-		}
-		else if (op === 'FetchStandardFontData') {
-			return standardFontProvider(data.filename);
-		}
-	};
-
-	let task = {
-		ensureNotTerminated() {}
-	};
-
-	let items = [];
-	let sink = {
-		desiredSize: 999999999,
-		enqueue: function (z) {
-			items = items.concat(z.items);
-		}
-	};
-
-	await page.extractTextContent({
-		handler: handler,
-		task: task,
-		sink: sink,
-		page
-	});
-
-	return items;
-}
-
-async function getStructuredText(page, cmapProvider, standardFontProvider, data = {}) {
+async function getPageData(pdfDocument, cmapProvider, standardFontProvider, data = {}) {
 	let handler = {};
 	handler.send = function () {};
 	handler.sendWithPromise = async function (op, data) {
@@ -64,69 +23,7 @@ async function getStructuredText(page, cmapProvider, standardFontProvider, data 
 		}
 	};
 	let task = { ensureNotTerminated() {} };
-	return page.getStructuredText({ handler, task, data });
-}
-
-async function getPageChs(pageIndex, pdfDocument, cmapProvider, standardFontProvider) {
-	if (!pdfDocument.chsCache) {
-		pdfDocument.chsCache = {};
-	}
-	if (pdfDocument.chsCache[pageIndex]) {
-		return pdfDocument.chsCache[pageIndex];
-	}
-
-	let page = await pdfDocument.getPage(pageIndex);
-	let pageItems = await getText(page, cmapProvider, standardFontProvider);
-
-	let fingerprints = new Set();
-	let chs = [];
-	for (let item of pageItems) {
-		for (let ch of item.chars) {
-			if (ch.rotation % 90 === 0
-				&& ch.c !== ' '
-				// Sometimes char can map to null and break strings
-				&& ch.c.charCodeAt(0)
-			) {
-				// Some PDF files have their text layer characters repeated many times, therefore remove them
-				let fingerprint = ch.c + ch.rect.join('');
-				if (!fingerprints.has(fingerprint)) {
-					fingerprints.add(fingerprint);
-					chs.push(ch);
-				}
-			}
-		}
-	}
-
-	pdfDocument.chsCache[pageIndex] = chs;
-	return chs;
-}
-
-async function extractPageLabelPoints(pdfDocument, cmapProvider, standardFontProvider) {
-	for (let i = 0; i < 5 && i + 3 < pdfDocument.numPages; i++) {
-		let pageHeight = (await pdfDocument.getPage(i + 1)).view[3];
-		let chs1 = await getPageChs(i, pdfDocument, cmapProvider, standardFontProvider);
-		let chs2 = await getPageChs(i + 1, pdfDocument, cmapProvider, standardFontProvider);
-		let chs3 = await getPageChs(i + 2, pdfDocument, cmapProvider, standardFontProvider);
-		let chs4 = await getPageChs(i + 3, pdfDocument, cmapProvider, standardFontProvider);
-		let res = await getPageLabelPoints(i, chs1, chs2, chs3, chs4, pageHeight);
-		if (res) {
-			return res;
-		}
-	}
-	return null;
-}
-
-async function extractPageLabel(pageIndex, points, pdfDocument, cmapProvider, standardFontProvider) {
-	let chsPrev, chsCur, chsNext;
-	if (pageIndex > 0) {
-		chsPrev = await getPageChs(pageIndex - 1, pdfDocument, cmapProvider, standardFontProvider);
-	}
-	chsCur = await getPageChs(pageIndex, pdfDocument, cmapProvider, standardFontProvider);
-
-	if (pageIndex < pdfDocument.numPages - 1) {
-		chsNext = await getPageChs(pageIndex + 1, pdfDocument, cmapProvider, standardFontProvider);
-	}
-	return getPageLabel(pageIndex, chsPrev, chsCur, chsNext, points);
+	return pdfDocument.getPageData({ handler, task, data });
 }
 
 async function writeAnnotations(buf, annotations, password) {
@@ -279,39 +176,20 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 		imported = splitAnnotations(imported);
 	}
 
-	let pageChs;
 	let pageHeight;
 	for (let annotation of imported) {
 		let pageIndex = annotation.position.pageIndex;
 		let page = await pdfDocument.getPage(pageIndex);
 		pageHeight = page.view[3];
-		pageChs = await getPageChs(pageIndex, pdfDocument, cmapProvider, standardFontProvider);
+		let pageData = await getPageData(pdfDocument, cmapProvider, standardFontProvider, { pageIndex });
+		let { structuredText, pageLabel } = pageData;
+		let chars = flattenChars(structuredText);
 
-		// Reverse RTL lines
-		getLines(pageChs, true);
-
-		let points = await extractPageLabelPoints(pdfDocument, cmapProvider, standardFontProvider);
-		if (points) {
-			// annotation.pageLabel = '-';
-			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider, standardFontProvider);
-			if (pageLabel) {
-				annotation.pageLabel = pageLabel;
-			}
-		}
-
-		if (!annotation.pageLabel) {
-			let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
-			if (pageLabels && pageLabels[pageIndex]) {
-				annotation.pageLabel = pageLabels[pageIndex];
-			}
-			else {
-				annotation.pageLabel = (pageIndex + 1).toString();
-			}
-		}
+		annotation.pageLabel = pageLabel || (pageIndex + 1).toString();
 
 		let offset = 0;
 		if (annotation.type === 'highlight') {
-			let range = getRangeByHighlight(pageChs, annotation.position.rects);
+			let range = getRangeByHighlight(structuredText, annotation.position.rects);
 			if (range) {
 				offset = range.offset;
 				annotation.text = range.text;
@@ -324,7 +202,7 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 			}
 		}
 		else if (['note', 'image'].includes(annotation.type)) {
-			offset = getClosestOffset(pageChs, annotation.position.rects[0]);
+			offset = getClosestOffset(chars, annotation.position.rects[0]);
 		}
 		// Ink
 		else {
@@ -542,8 +420,8 @@ async function getFulltext(buf, password, pagesNum, cmapProvider, standardFontPr
 	let text = [];
 	let pageIndex = 0;
 	for (; pageIndex < pagesNum; pageIndex++) {
-		let page = await pdfManager.pdfDocument.getPage(pageIndex);
-		let { paragraphs } = await getStructuredText(page, cmapProvider, standardFontProvider)
+		let { structuredText } = await getPageData(pdfManager.pdfDocument, cmapProvider, standardFontProvider, { pageIndex });
+		let { paragraphs } = structuredText;
 		for (let paragraph of paragraphs) {
 			for (let line of paragraph.lines) {
 				for (let word of line.words) {
@@ -620,7 +498,8 @@ async function getRecognizerData(buf, password, cmapProvider, standardFontProvid
 
 		let fonts = [];
 
-		let { paragraphs } = await getStructuredText(page, cmapProvider, standardFontProvider);
+		let pageData = await getPageData(pdfManager.pdfDocument, cmapProvider, standardFontProvider, { pageIndex });
+		let { paragraphs } = pageData.structuredText;
 
 		let newLines = [];
 
@@ -681,10 +560,6 @@ async function getRecognizerData(buf, password, cmapProvider, standardFontProvid
 	return data;
 }
 
-async function getStructure() {
-
-}
-
 /**
  * Based on annotation position data (page index and rect) modifies each
  * annotation object adding or changing the following keys:
@@ -712,7 +587,6 @@ async function getStructure() {
  *                        have been processed (inline).
  */
 async function processAnnotations(annotations, pdf, cmapProvider, standardFontProvider, { keepText = false, fixTiny = false } = {}) {
-	let pageChs;
 	let pageHeight;
 	const pdfDocument = pdf.pdfManager.pdfDocument;
 	annotations = splitAnnotations(annotations);
@@ -721,34 +595,15 @@ async function processAnnotations(annotations, pdf, cmapProvider, standardFontPr
 		let pageIndex = annotation.position.pageIndex;
 		let page = await pdfDocument.getPage(pageIndex);
 		pageHeight = page.view[3];
-		pageChs = await getPageChs(pageIndex, pdfDocument, cmapProvider, standardFontProvider);
+		let pageData = await getPageData(pdfDocument, cmapProvider, standardFontProvider, { pageIndex });
+		let { structuredText, pageLabel } = pageData;
+		let chars = flattenChars(structuredText);
 
-		// Reverse RTL lines
-		getLines(pageChs, true);
-
-		let points = await extractPageLabelPoints(pdfDocument, cmapProvider, standardFontProvider);
-		if (points) {
-			// annotation.pageLabel = '-';
-			// TODO: Improve extractPageLabel
-			let pageLabel = await extractPageLabel(annotation.position.pageIndex, points, pdfDocument, cmapProvider, standardFontProvider);
-			if (pageLabel) {
-				annotation.pageLabel = pageLabel;
-			}
-		}
-
-		if (!annotation.pageLabel) {
-			let pageLabels = pdf.pdfManager.pdfDocument.catalog.pageLabels;
-			if (pageLabels && pageLabels[pageIndex]) {
-				annotation.pageLabel = pageLabels[pageIndex];
-			}
-			else {
-				annotation.pageLabel = (pageIndex + 1).toString();
-			}
-		}
+		annotation.pageLabel = pageLabel || (pageIndex + 1).toString();
 
 		let offset = 0;
 		if (annotation.type === 'highlight') {
-			let range = getRangeByHighlight(pageChs, annotation.position.rects);
+			let range = getRangeByHighlight(chars, annotation.position.rects);
 			if (range) {
 				offset = range.offset;
 				annotation.text = (keepText && annotation.text) ? annotation.text : range.text;
@@ -756,7 +611,7 @@ async function processAnnotations(annotations, pdf, cmapProvider, standardFontPr
 		}
 		// 'note'
 		else {
-			offset = getClosestOffset(pageChs, annotation.position.rects[0]);
+			offset = getClosestOffset(chars, annotation.position.rects[0]);
 		}
 
 		let top = pageHeight - annotation.position.rects[0][3];
@@ -1062,7 +917,6 @@ module.exports = {
 	deletePages,
 	rotatePages,
 	getFulltext,
-	getStructure,
 	getRecognizerData,
 	importCitaviAnnotations,
 	importMendeleyAnnotations
