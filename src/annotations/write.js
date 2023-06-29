@@ -8,6 +8,9 @@ exports.writeRawAnnotations = function (structure, annotations) {
 			page['/Annots'] = [];
 		}
 		let rawAnnotation = annotationToRaw(annotation);
+		if (!rawAnnotation) {
+			continue;
+		}
 		page['/Annots'].push(rawAnnotation);
 		if (annotation.type === 'highlight' && annotation.comment) {
 			page['/Annots'].push(addPopup(rawAnnotation));
