@@ -12,7 +12,7 @@ exports.writeRawAnnotations = function (structure, annotations) {
 			continue;
 		}
 		page['/Annots'].push(rawAnnotation);
-		if (annotation.type === 'highlight' && annotation.comment) {
+		if (['highlight', 'underline'].includes(annotation.type) && annotation.comment) {
 			page['/Annots'].push(addPopup(rawAnnotation));
 		}
 	}
@@ -151,6 +151,66 @@ function annotationToRaw(annotation) {
 			'/Type': '/Annot',
 			'/Rect': containerRect,
 			'/Subtype': '/Highlight',
+			'/QuadPoints': rectsToQuads(annotation.position.rects),
+			'/M': '(' + dateToRaw(annotation.dateModified) + ')',
+			'/T': '(' + stringToRaw(annotation.authorName) + ')',
+			'/Contents': '(' + stringToRaw(annotation.comment) + ')',
+			'/NM': '(' + 'Zotero-' + annotation.id + ')',
+			'/Zotero:Key': '(' + annotation.id + ')',
+			'/Zotero:AuthorName': '(' + stringToRaw(annotation.authorName) + ')',
+			'/F': 4,
+			'/C': colorToRaw(annotation.color),
+			'/AP': {
+				'/N': {
+					'/BBox': containerRect,
+					'/FormType': 1,
+					'/Resources': {
+						'/ExtGState': {
+							'/G0': {
+								'/BM': '/Multiply',
+								'/CA': 1,
+								'/ca': 1,
+								num: 0,
+								gen: 0
+							},
+							num: 0,
+							gen: 0
+						}, num: 0, gen: 0
+					},
+					'/Subtype': '/Form',
+					'/Type': '/XObject',
+					stream: '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' rg\r' + p + 'f\r',
+					num: 0,
+					gen: 0
+				}
+			},
+			num: 0,
+			gen: 0
+		};
+
+		if (!annotation.comment) {
+			delete res['/Contents'];
+		}
+
+		if (annotation.tags.length) {
+			res['/Zotero:Tags'] = '(' + stringToRaw(JSON.stringify(annotation.tags)) + ')';
+		}
+
+		return res;
+	}
+	else if (annotation.type === 'underline') {
+		let p = '';
+		for (let rect of annotation.position.rects) {
+			p += rect[0] + ' ' + rect[1] + ' m\r';
+			p += rect[2] + ' ' + rect[1] + ' l\r';
+			p += rect[2] + ' ' + (rect[1] + 3) + ' l\r';
+			p += rect[0] + ' ' + (rect[1] + 3) + ' l\rh\r';
+		}
+
+		let res = {
+			'/Type': '/Annot',
+			'/Rect': containerRect,
+			'/Subtype': '/Underline',
 			'/QuadPoints': rectsToQuads(annotation.position.rects),
 			'/M': '(' + dateToRaw(annotation.dateModified) + ')',
 			'/T': '(' + stringToRaw(annotation.authorName) + ')',

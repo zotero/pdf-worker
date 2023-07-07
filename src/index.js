@@ -188,7 +188,7 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 		annotation.pageLabel = pageLabel || (pageIndex + 1).toString();
 
 		let offset = 0;
-		if (annotation.type === 'highlight') {
+		if (['highlight', 'underline'].includes(annotation.type)) {
 			let range = getRangeByHighlight(structuredText, annotation.position.rects);
 			if (range) {
 				offset = range.offset;
@@ -210,7 +210,7 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 		}
 
 		let top = 0;
-		if (['highlight', 'note', 'image'].includes(annotation.type)) {
+		if (['highlight', 'underline', 'note', 'image'].includes(annotation.type)) {
 			top = pageHeight - annotation.position.rects[0][3];
 		}
 		// Ink

@@ -62,7 +62,7 @@ function getAnnotationID(rawAnnot) {
 
 function isTransferable(rawAnnot) {
 	let id = getAnnotationID(rawAnnot);
-	return !!(['/Text', '/Highlight'].includes(rawAnnot['/Subtype'])
+	return !!(['/Text', '/Highlight', '/Underline'].includes(rawAnnot['/Subtype'])
 		|| ['/Square', '/Ink'].includes(rawAnnot['/Subtype']) && id);
 }
 

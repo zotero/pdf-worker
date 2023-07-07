@@ -111,10 +111,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	}
 
 	type = type.toLowerCase();
-	if (type === 'underline') {
-		type = 'highlight';
-	}
-	else if (type === 'text') {
+	if (type === 'text') {
 		type = 'note';
 	}
 	else if (type === 'square') {
@@ -133,7 +130,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 		return null;
 	}
 
-	if (['highlight', 'note', 'image'].includes(annotation.type)) {
+	if (['highlight', 'underline', 'note', 'image'].includes(annotation.type)) {
 		let rects;
 		if (Array.isArray(rawAnnot['/QuadPoints'])
 			&& rawAnnot['/QuadPoints'].length % 8 === 0
