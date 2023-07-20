@@ -9,6 +9,7 @@ const { textApproximatelyEqual } = require('./utils');
 const { LocalPdfManager } = require('../pdf.js/build/lib/core/pdf_manager');
 const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
 const { FontEmbedder } = require('./font/font-embedder');
+const { renderAnnotations } = require('./renderer');
 
 // TODO: Highlights shouldn't be allowed to be outside of page view
 
@@ -755,15 +756,19 @@ async function standardFontProvider(filename) {
 	return data;
 }
 
+async function renderedAnnotationSaver(libraryID, annotationKey, buf) {
+	return await query('SaveRenderedAnnotation', { libraryID, annotationKey, buf }, [buf]);
+}
+
 if (typeof self !== 'undefined') {
 	let promiseID = 0;
 	let waitingPromises = {};
 
-	self.query = async function (action, data) {
+	self.query = async function (action, data, transfer) {
 		return new Promise(function (resolve) {
 			promiseID++;
 			waitingPromises[promiseID] = resolve;
-			self.postMessage({ id: promiseID, action, data });
+			self.postMessage({ id: promiseID, action, data }, transfer);
 		});
 	};
 
@@ -914,6 +919,26 @@ if (typeof self !== 'undefined') {
 					message.data.password,
 					cmapProvider,
 					standardFontProvider
+				);
+				self.postMessage({ responseID: message.id, data }, []);
+			}
+			catch (e) {
+				self.postMessage({
+					responseID: message.id,
+					error: errObject(e)
+				}, []);
+			}
+		}
+		else if (message.action === 'renderAnnotations') {
+			try {
+				let data = await renderAnnotations(
+					message.data.libraryID,
+					message.data.buf,
+					message.data.annotations,
+					message.data.password,
+					cmapProvider,
+					standardFontProvider,
+					renderedAnnotationSaver
 				);
 				self.postMessage({ responseID: message.id, data }, []);
 			}
