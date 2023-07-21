@@ -4,7 +4,7 @@ const { writeRawAnnotations } = require('./annotations/write');
 const { deleteAnnotations } = require('./annotations/delete');
 const { getRangeByHighlight, getClosestOffset, flattenChars } = require('./text');
 const { Util } = require('../pdf.js/build/lib/shared/util');
-const { resizeAndFitRect } = require('./annotations/read');
+const { resizeAndFitRect, hasAnyAnnotations } = require('./annotations/read');
 const { textApproximatelyEqual } = require('./utils');
 const { LocalPdfManager } = require('../pdf.js/build/lib/core/pdf_manager');
 const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
@@ -560,6 +560,14 @@ async function getRecognizerData(buf, password, cmapProvider, standardFontProvid
 	return data;
 }
 
+async function hasAnnotations(buf, password) {
+	let pdf = new PDFAssembler();
+	await pdf.init(buf, password);
+	let pdfDocument = pdf.pdfManager.pdfDocument;
+	let structure = await pdf.getPDFStructure();
+	return hasAnyAnnotations(structure, pdfDocument);
+}
+
 /**
  * Based on annotation position data (page index and rect) modifies each
  * annotation object adding or changing the following keys:
@@ -908,6 +916,23 @@ if (typeof self !== 'undefined') {
 				}, []);
 			}
 		}
+		else if (message.action === 'hasAnnotations') {
+			try {
+				let data = {
+					hasAnnotations: await hasAnnotations(
+						message.data.buf,
+						message.data.password
+					)
+				};
+				self.postMessage({ responseID: message.id, data }, []);
+			}
+			catch (e) {
+				self.postMessage({
+					responseID: message.id,
+					error: errObject(e)
+				}, []);
+			}
+		}
 	};
 }
 
@@ -919,5 +944,6 @@ module.exports = {
 	getFulltext,
 	getRecognizerData,
 	importCitaviAnnotations,
-	importMendeleyAnnotations
+	importMendeleyAnnotations,
+	hasAnnotations
 };

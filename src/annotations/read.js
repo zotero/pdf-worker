@@ -29,6 +29,43 @@ exports.readRawAnnotations = function (structure) {
 	return annotations;
 };
 
+exports.hasAnyAnnotations = function (structure) {
+	let rawPages = structure['/Root']['/Pages']['/Kids'];
+	for (let pageIndex = 0; pageIndex < rawPages.length; pageIndex++) {
+		let rawAnnots = rawPages[pageIndex] && rawPages[pageIndex]['/Annots'];
+		if (!rawAnnots) continue;
+		for (let rawAnnotIdx = 0; rawAnnotIdx < rawAnnots.length; rawAnnotIdx++) {
+			let rawAnnot = rawAnnots[rawAnnotIdx];
+			if (!rawAnnot) continue;
+			// Check for "markup" annotations per the PDF spec
+			// https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf, p. 390
+			if ([
+				'/Text',
+				'/FreeText',
+				'/Line',
+				'/Square',
+				'/Circle',
+				'/Polygon',
+				'/PolyLine',
+				'/Highlight',
+				'/Underline',
+				'/Squiggly',
+				'/StrikeOut',
+				'/Stamp',
+				'/Caret',
+				'/Ink',
+				'/FileAttachment',
+				'/Sound',
+				'/Redact'
+			].includes(rawAnnot['/Subtype'])) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+};
+
 function resizeAndFitRect(rect, width, height, view) {
 	let point = [rect[0] + (rect[2] - rect[0]) / 2, rect[1] + (rect[3] - rect[1]) / 2];
 	rect = [
