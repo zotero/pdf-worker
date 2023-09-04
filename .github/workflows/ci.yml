@@ -33,7 +33,7 @@ jobs:
           env.ACT != 'true'
           && github.repository == 'zotero/pdf-worker'
           && github.event_name == 'push'
-          && (github.ref == 'refs/heads/master' || endsWith(github.ref, '-hotfix') || github.ref == 'refs/heads/gh-actions-ci-test')
+          && (github.ref == 'refs/heads/zotero-pre-reader-2.0' || endsWith(github.ref, '-hotfix') || github.ref == 'refs/heads/gh-actions-ci-test')
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
