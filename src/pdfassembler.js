@@ -229,16 +229,23 @@ class PDFAssembler {
 			const refKey = `${node.num}-${node.gen}`;
 			if (this.objCache[refKey] === undefined) {
 				this.objCache[refKey] = null;
-				const refNode = this.pdfManager.pdfDocument.xref.fetch(node);
-				this.objCache[refKey] = this.resolveNodeRefs(refNode, name, parent, contents);
-				if (typeof this.objCache[refKey] === 'object' &&
-					this.objCache[refKey] !== null &&
-					!(this.objCache[refKey] instanceof Array)) {
-					Object.assign(this.objCache[refKey], { num: 0, gen: 0 });
+				let refNode;
+				try {
+					refNode = this.pdfManager.pdfDocument.xref.fetch(node);
+				} catch (e) {
+					console.error(e);
 				}
-				if (this.objCacheQueue[refKey] !== undefined) {
-					Object.keys(this.objCacheQueue[refKey]).forEach(fixName => this.objCacheQueue[refKey][fixName].forEach(fixParent => fixParent[fixName] = this.objCache[refKey]));
-					delete this.objCacheQueue[refKey];
+				if (refNode) {
+					this.objCache[refKey] = this.resolveNodeRefs(refNode, name, parent, contents);
+					if (typeof this.objCache[refKey] === 'object' &&
+						this.objCache[refKey] !== null &&
+						!(this.objCache[refKey] instanceof Array)) {
+						Object.assign(this.objCache[refKey], { num: 0, gen: 0 });
+					}
+					if (this.objCacheQueue[refKey] !== undefined) {
+						Object.keys(this.objCacheQueue[refKey]).forEach(fixName => this.objCacheQueue[refKey][fixName].forEach(fixParent => fixParent[fixName] = this.objCache[refKey]));
+						delete this.objCacheQueue[refKey];
+					}
 				}
 			}
 			else if (this.objCache[refKey] === null) {
