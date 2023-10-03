@@ -154,9 +154,21 @@ class PDFAssembler {
 				const infoDict = new Dict();
 				infoDict._map = this.pdfManager.pdfDocument.documentInfo;
 				this.pdfTree['/Info'] = this.resolveNodeRefs(infoDict) || {};
+				delete this.pdfTree['/Info']['/PDFFormatVersion'];
+				delete this.pdfTree['/Info']['/Language'];
+				delete this.pdfTree['/Info']['/EncryptFilterName'];
+				delete this.pdfTree['/Info']['/IsLinearized'];
 				delete this.pdfTree['/Info']['/IsAcroFormPresent'];
 				delete this.pdfTree['/Info']['/IsXFAPresent'];
-				delete this.pdfTree['/Info']['/PDFFormatVersion'];
+				delete this.pdfTree['/Info']['/IsCollectionPresent'];
+				delete this.pdfTree['/Info']['/IsSignaturesPresent'];
+
+				if (this.pdfManager.pdfDocument.documentInfo['Custom']) {
+					delete this.pdfTree['/Info']['/Custom'];
+					let customDict = new Dict();
+					customDict._map = this.pdfManager.pdfDocument.documentInfo['Custom'];
+					this.pdfTree['/Info'] = { ...this.pdfTree['/Info'], ...(this.resolveNodeRefs(customDict) || {}) };
+				}
 
 				let producer = this.pdfManager.pdfDocument.documentInfo.Producer;
 				if (producer) {
