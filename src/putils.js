@@ -82,7 +82,7 @@ function getColorArray(color) {
 
 		case 1: // Convert grayscale to RGB
 			ColorSpace.singletons.gray.getRgbItem(color, 0, rgbColor, 0);
-			this.color = rgbColor;
+			value = rgbColor;
 			break;
 
 		case 3: // Convert RGB percentages to RGB
