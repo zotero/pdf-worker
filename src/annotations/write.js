@@ -1,13 +1,14 @@
+const { applyTransform, getBoundingBox, getCenter } = require('./common');
 const NOTE_SIZE = 22;
 
-exports.writeRawAnnotations = function (structure, annotations) {
+exports.writeRawAnnotations = async function (structure, annotations, fontEmbedder) {
 	for (let annotation of annotations) {
 		let pageIndex = annotation.position.pageIndex;
 		let page = structure['/Root']['/Pages']['/Kids'][pageIndex];
 		if (!page['/Annots']) {
 			page['/Annots'] = [];
 		}
-		let rawAnnotation = annotationToRaw(annotation);
+		let rawAnnotation = await annotationToRaw(annotation, fontEmbedder);
 		if (!rawAnnotation) {
 			continue;
 		}
@@ -63,7 +64,45 @@ function dateToRaw(str) {
 	.replace(/[^0-9]/g, '');
 }
 
-function annotationToRaw(annotation) {
+function calculateLines(chars, fontSize, maxWidth) {
+	let lines = [];
+	let currentLine = [];
+	let currentLineWidth = 0;
+
+	for (let i = 0; i < chars.length; i++) {
+		let char = chars[i];
+		let charWidth = char.width / 1000 * fontSize;
+
+		if (char.char === ' ') {
+			// Calculate the width of the next word
+			let nextSpaceIndex = chars.findIndex((c, idx) => idx > i && c.char === ' ');
+			if (nextSpaceIndex === -1) nextSpaceIndex = chars.length;
+
+			let nextWordWidth = chars.slice(i + 1, nextSpaceIndex).reduce((acc, c) => acc + c.width / 1000 * fontSize, 0);
+
+			// Check if adding the next word (excluding the space) will exceed maxWidth
+			if (currentLineWidth + nextWordWidth > maxWidth && currentLine.length > 0) {
+				lines.push(currentLine);
+				currentLine = [];
+				currentLineWidth = 0;
+				continue; // Skip adding the space character to the new line
+			}
+		}
+
+		// Add the character to the current line and update the line width
+		currentLine.push(char);
+		currentLineWidth += charWidth;
+	}
+
+	// Add the final line if not empty
+	if (currentLine.length > 0) {
+		lines.push(currentLine);
+	}
+
+	return lines;
+}
+
+async function annotationToRaw(annotation, fontEmbedder) {
 	annotation = JSON.parse(JSON.stringify(annotation));
 	let containerRect;
 	if (annotation.position.rects) {
@@ -136,6 +175,185 @@ function annotationToRaw(annotation) {
 			res['/Zotero:Tags'] = '(' + stringToRaw(JSON.stringify(annotation.tags)) + ')';
 		}
 
+		return res;
+	}
+	else if (annotation.type === 'text') {
+		// Integer
+		let roundedDegrees = Math.round(annotation.position.rotation);
+		// One decimal place
+		let roundedFontSize = Math.round(annotation.position.fontSize * 10) / 10;
+		let res = {
+			'/Type': '/Annot',
+			'/Rect': containerRect,
+			'/Subtype': '/FreeText',
+			'/M': '(' + dateToRaw(annotation.dateModified) + ')',
+			'/T': '(' + stringToRaw(annotation.authorName) + ')',
+			'/Contents':  '(' + stringToRaw(annotation.comment) + ')',
+			'/NM': '(' + 'Zotero-' + annotation.id + ')',
+			'/Zotero:Key': '(' + annotation.id + ')',
+			'/Zotero:AuthorName': '(' + stringToRaw(annotation.authorName) + ')',
+			'/Zotero:Rect': containerRect,
+			'/Zotero:Rotation': roundedDegrees,
+			'/Zotero:FontSize': roundedFontSize,
+			'/Zotero:Color': colorToRaw(annotation.color),
+			'/DA': `(/Helvetica ${roundedFontSize} Tf ${colorToRaw(annotation.color).join(' ')} rg)`,
+			'/F': 4,
+			'/CA': 1,
+			'/Border': [0, 0, 1],
+			num: 0,
+			gen: 0
+		};
+
+		if (annotation.tags.length) {
+			res['/Zotero:Tags'] = '(' + stringToRaw(JSON.stringify(annotation.tags)) + ')';
+		}
+
+		let fontResource = {};
+		let chars = await fontEmbedder.embedChars(annotation.comment, fontResource);
+		if (chars) {
+			let fontSize = roundedFontSize;
+			let lineHeightMultiplier = 1.2;
+
+			let width = containerRect[2] - containerRect[0];
+			let height = containerRect[3] - containerRect[1];
+
+			let maxLines;
+			let lines;
+			let n = 0;
+			// Reduce font size to fit the text within the annotation area
+			while (n++ < 20 && fontSize > 4) {
+				maxLines = Math.floor(height / (fontSize * lineHeightMultiplier));
+				lines = calculateLines(chars, fontSize, width);
+				if (lines.length > maxLines) {
+					fontSize -= 0.5;
+					continue;
+				}
+				break;
+			}
+
+			let rect = containerRect;
+			let rotation = roundedDegrees * Math.PI / 180;
+			let cosTheta = Math.cos(rotation);
+			let sinTheta = Math.sin(rotation);
+			let rotationMatrix = [cosTheta, sinTheta, -sinTheta, cosTheta, 0, 0];
+			let [x2, y2] = applyTransform([rect[0], rect[3]], rotationMatrix);
+			// Calculate delta values for adjusting rotation origin
+			let deltaX = rect[0] - x2;
+			let deltaY = rect[3] - y2;
+			// Adjust the rotation matrix with delta values
+			rotationMatrix[4] = deltaX;
+			rotationMatrix[5] = deltaY;
+
+			// Apply transformation to each corner of the rectangle
+			let points = [
+				applyTransform([rect[0], rect[1]], rotationMatrix),
+				applyTransform([rect[0], rect[3]], rotationMatrix),
+				applyTransform([rect[2], rect[1]], rotationMatrix),
+				applyTransform([rect[2], rect[3]], rotationMatrix)
+			];
+
+			// Calculate bounding box of the transformed rectangle
+			let transformedRect = getBoundingBox(points);
+
+			// Find centers of the original and transformed rectangles
+			let originalCenter = getCenter(rect);
+			let transformedCenter = getCenter(transformedRect);
+
+			// Calculate the distances along x and y axes
+			deltaX = transformedCenter[0] - originalCenter[0];
+			deltaY = transformedCenter[1] - originalCenter[1];
+
+			let matrix = rotationMatrix.slice();
+			matrix[4] -= deltaX;
+			matrix[5] -= deltaY;
+
+			// Reapply the adjusted matrix to the rectangle corners
+			points = [
+				applyTransform([rect[0], rect[1]], matrix),
+				applyTransform([rect[0], rect[3]], matrix),
+				applyTransform([rect[2], rect[3]], matrix),
+				applyTransform([rect[2], rect[1]], matrix),
+			];
+
+			let bbox = getBoundingBox(points);
+			bbox = bbox.map(n => Math.round(n * 1000) / 1000);
+			res['/Rect'] = bbox;
+
+			let stream = ['q'];
+
+			// // Set stroke color to green (0 Red, 1 Green, 0 Blue)
+			// stream.push('0 1 0 RG');
+			// // Construct the path commands
+			// stream.push(
+			// 	`${points[0][0]} ${points[0][1]} m`,
+			// 	`${points[1][0]} ${points[1][1]} l`,
+			// 	`${points[2][0]} ${points[2][1]} l`,
+			// 	`${points[3][0]} ${points[3][1]} l`,
+			// 	'h S'
+			// );
+
+			stream.push('BT');
+			stream.push(`${colorToRaw(annotation.color).join(' ')} rg`);
+
+			// The reference point for rotation (bottom-left corner of the rectangle)
+			let refX = rect[0];
+			let refY = rect[3];
+
+			for (let i = 0; i < lines.length; i++) {
+				let lineY = refY - (i + 1) * fontSize * lineHeightMultiplier;
+
+				// Rotating around the reference point
+				let transformedX = refX - (lineY - refY) * sinTheta - deltaX;
+				let transformedY = refY + (lineY - refY) * cosTheta - deltaY;
+
+				let matrix = rotationMatrix.slice();
+				matrix[4] = transformedX.toFixed(3);
+				matrix[5] = transformedY.toFixed(3);
+
+				stream.push(`${matrix.join(' ')} Tm`);
+
+				let chars = lines[i];
+				let currentFont = '';
+				let textBuffer = '';
+
+				for (let char of chars) {
+					if (char.resKey !== currentFont) {
+						// If the font changes, render the accumulated text and start a new buffer
+						if (textBuffer) {
+							stream.push(`(${textBuffer}) Tj`);
+							textBuffer = '';
+						}
+						currentFont = char.resKey;
+						stream.push(`/${currentFont} ${fontSize} Tf`);
+					}
+					textBuffer += char.utf16;
+				}
+
+				// Render any remaining text in the buffer
+				if (textBuffer) {
+					stream.push(`(${textBuffer}) Tj`);
+				}
+			}
+
+			stream.push('ET', 'Q');
+			stream = stream.join(' ');
+
+			res['/AP'] = {
+				'/N': {
+					'/BBox': bbox,
+					'/FormType': 1,
+					'/Subtype': '/Form',
+					'/Type': '/XObject',
+					'/Resources': {
+						'/Font': fontResource,
+						'/ProcSet': ['/PDF', '/Text']
+					},
+					'stream': stream,
+					'num': 0,
+					'gen': 0
+				}
+			};
+		}
 		return res;
 	}
 	else if (annotation.type === 'highlight') {

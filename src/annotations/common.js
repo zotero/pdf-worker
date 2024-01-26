@@ -1,12 +1,21 @@
 const { isArrayEqual, Util } = require('../../pdf.js/build/lib/shared/util');
 
-function getBoundingBox(box) {
-	if (Array.isArray(box) && box.length === 4) {
-		if (box[2] - box[0] !== 0 && box[3] - box[1] !== 0) {
-			return box;
-		}
-	}
-	return null;
+function applyTransform(p, m) {
+	const xt = p[0] * m[0] + p[1] * m[2] + m[4];
+	const yt = p[0] * m[1] + p[1] * m[3] + m[5];
+	return [xt, yt];
+}
+
+function getBoundingBox(points) {
+	let minX = Math.min(...points.map(p => p[0]));
+	let maxX = Math.max(...points.map(p => p[0]));
+	let minY = Math.min(...points.map(p => p[1]));
+	let maxY = Math.max(...points.map(p => p[1]));
+	return [minX, minY, maxX, maxY];
+}
+
+function getCenter(rect) {
+	return [(rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2];
 }
 
 function getRawPageView(rawPage) {
@@ -63,10 +72,13 @@ function getAnnotationID(rawAnnot) {
 function isTransferable(rawAnnot) {
 	let id = getAnnotationID(rawAnnot);
 	return !!(['/Text', '/Highlight', '/Underline'].includes(rawAnnot['/Subtype'])
-		|| ['/Square', '/Ink'].includes(rawAnnot['/Subtype']) && id);
+		|| ['/Square', '/Ink', '/FreeText'].includes(rawAnnot['/Subtype']) && id);
 }
 
 module.exports = {
+	applyTransform,
+	getBoundingBox,
+	getCenter,
 	getRawPageView,
 	getString,
 	isValidNumber,

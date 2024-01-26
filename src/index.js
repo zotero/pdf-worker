@@ -8,6 +8,7 @@ const { resizeAndFitRect, hasAnyAnnotations } = require('./annotations/read');
 const { textApproximatelyEqual } = require('./utils');
 const { LocalPdfManager } = require('../pdf.js/build/lib/core/pdf_manager');
 const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
+const { FontEmbedder } = require('./font/font-embedder');
 
 // TODO: Highlights shouldn't be allowed to be outside of page view
 
@@ -26,11 +27,12 @@ async function getPageData(pdfDocument, cmapProvider, standardFontProvider, data
 	return pdfDocument.getPageData({ handler, task, data });
 }
 
-async function writeAnnotations(buf, annotations, password) {
+async function writeAnnotations(buf, annotations, password, cmapProvider, standardFontProvider) {
 	let pdf = new PDFAssembler();
 	await pdf.init(buf, password);
 	let structure = await pdf.getPDFStructure();
-	writeRawAnnotations(structure, annotations);
+	let fontEmbedder = new FontEmbedder({ standardFontProvider });
+	await writeRawAnnotations(structure, annotations, fontEmbedder);
 	return await pdf.assemblePdf('ArrayBuffer');
 }
 
@@ -201,7 +203,7 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 				}
 			}
 		}
-		else if (['note', 'image'].includes(annotation.type)) {
+		else if (['note', 'image', 'text'].includes(annotation.type)) {
 			offset = getClosestOffset(chars, annotation.position.rects[0]);
 		}
 		// Ink
@@ -210,7 +212,7 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 		}
 
 		let top = 0;
-		if (['highlight', 'underline', 'note', 'image'].includes(annotation.type)) {
+		if (['highlight', 'underline', 'note', 'image', 'text'].includes(annotation.type)) {
 			top = pageHeight - annotation.position.rects[0][3];
 		}
 		// Ink
@@ -779,7 +781,13 @@ if (typeof self !== 'undefined') {
 		if (message.action === 'export') {
 			let buf;
 			try {
-				buf = await writeAnnotations(message.data.buf, message.data.annotations, message.data.password);
+				buf = await writeAnnotations(
+					message.data.buf,
+					message.data.annotations,
+					message.data.password,
+					cmapProvider,
+					standardFontProvider
+				);
 				self.postMessage({ responseID: message.id, data: { buf } }, [buf]);
 			}
 			catch (e) {

@@ -106,7 +106,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 		return null;
 	}
 	type = type.slice(1);
-	if (!['Text', 'Highlight', 'Underline', 'Square', 'Ink'].includes(type)) {
+	if (!['Text', 'Highlight', 'Underline', 'Square', 'Ink', 'FreeText'].includes(type)) {
 		return null;
 	}
 
@@ -117,6 +117,9 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	else if (type === 'square') {
 		type = 'image';
 	}
+	else if (type === 'freetext') {
+		type = 'text';
+	}
 
 	let annotation = {};
 	annotation.type = type;
@@ -126,7 +129,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 		annotation.id = getAnnotationID(rawAnnot);
 	}
 
-	if (['image', 'ink'].includes(type) && !annotation.id) {
+	if (['image', 'ink', 'text'].includes(type) && !annotation.id) {
 		return null;
 	}
 
@@ -162,8 +165,7 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 			rects
 		};
 	}
-	// Ink annotation
-	else {
+	else if (annotation.type === 'ink') {
 		if (!(Array.isArray(rawAnnot['/InkList'])
 			&& rawAnnot['/InkList'].every(path =>
 				Array.isArray(path)
@@ -185,12 +187,46 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 			width
 		};
 	}
+	else if (annotation.type === 'text') {
+		let rect, rotation, fontSize;
+
+		rect = rawAnnot['/Zotero:Rect'];
+		if (Array.isArray(rect)
+			&& rect.length % 4 === 0
+			&& rect.every(x => isValidNumber(x))) {
+			rect = putils.normalizeRect(rawAnnot['/Zotero:Rect']);
+		}
+		else {
+			return null;
+		}
+
+		rotation = rawAnnot['/Zotero:Rotation'];
+		if (!isValidNumber(rotation)) {
+			return null;
+		}
+		rotation = Math.round(rotation);
+
+		fontSize = rawAnnot['/Zotero:FontSize'];
+		if (!isValidNumber(fontSize)) {
+			return null;
+		}
+		fontSize = Math.round(fontSize * 10) / 10;
+
+		annotation.position = {
+			pageIndex,
+			rotation,
+			fontSize,
+			rects: [rect]
+		};
+	}
 
 	annotation.dateModified = utils.pdfDateToIso(getString(rawAnnot['/M']));
 	annotation.authorName = stringToPDFString(getString(rawAnnot['/Zotero:AuthorName']));
 	annotation.comment = stringToPDFString(getString(rawAnnot['/Contents']));
 
-	let colorArray = putils.getColorArray(rawAnnot['/C'] || rawAnnot['/IC']);
+	let colorArray = putils.getColorArray(
+		rawAnnot['/Zotero:Color'] || rawAnnot['/C'] || rawAnnot['/IC']
+	);
 	let alpha = rawAnnot['/CA'];
 	if (colorArray && alpha === parseFloat(alpha)) {
 		// Make sure we aren't producing invisible annotations
