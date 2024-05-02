@@ -365,6 +365,14 @@ async function deletePages(buf, pageIndexes, password) {
 	return pdf.assemblePdf('ArrayBuffer');
 }
 
+async function insertBlankPage(buf, pageIndex, password) {
+	let pdf = new PDFAssembler();
+	await pdf.init(buf, password);
+	let structure = await pdf.getPDFStructure();
+	structure['/Root']['/Pages']['/Kids'].splice(pageIndex, 0, {});
+	return pdf.assemblePdf('ArrayBuffer');
+}
+
 async function rotatePages(buf, pageIndexes, degrees, password) {
 	if (degrees % 90 !== 0 || degrees < 0) {
 		throw new Error('Invalid degrees value');
@@ -973,6 +981,7 @@ module.exports = {
 	writeAnnotations,
 	importAnnotations,
 	deletePages,
+	insertBlankPage,
 	rotatePages,
 	getFulltext,
 	getRecognizerData,
