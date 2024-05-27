@@ -24,13 +24,17 @@
  */
 /* eslint-env mocha, node */
 
-const path = require('path');
-const expect = require('chai').expect;
+import 'core-js/stable/index.js';
 
-const fs = require('fs');
-const crypto = require('crypto');
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { expect } from 'chai';
+import fs from 'fs';
+import crypto from 'crypto';
+import * as pdfWorker from '../src/index.js';
 
-const pdfWorker = require('../src');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 describe('PDF Worker', function () {
 	it('should import annotations', async function () {
@@ -46,7 +50,7 @@ describe('PDF Worker', function () {
 				comment: 'A comment for the highlighted text',
 				color: '#ffff00',
 				pageLabel: '1',
-				text: 'Compilers for statically typed languages rely on type information to generate efficient machine code',
+				text: 'Compilers for statically typed languages rely on type information to generate efﬁcient machine code',
 				sortIndex: '00000|002514|00386',
 				tags: [],
 				transferable: true
@@ -61,7 +65,7 @@ describe('PDF Worker', function () {
 				comment: 'Sounds promising',
 				color: '#c9222a',
 				pageLabel: '1',
-				text: 'We present an alternative compilation technique for dynamically-typed languages that identifies frequently executed loop traces at run-time and then generates machine code on the fly that is specialized for the actual dynamic types occurring on each path through the loop',
+				text: 'We present an alternative compilation technique for dynamically-typed languages that identiﬁes frequently executed loop traces at run-time and then generates machine code on the ﬂy that is specialized for the actual dynamic types occurring on each path through the loop',
 				sortIndex: '00000|000779|00381',
 				tags: [],
 				transferable: true
@@ -88,7 +92,7 @@ describe('PDF Worker', function () {
 				comment: 'Comment 1',
 				color: '#f8c348',
 				pageLabel: '1',
-				text: 'Dynamic languages such as JavaScript, Python, and Ruby, are popular since they are expressive, accessible to non-experts, and make deployment as easy as distributing a source file. They are used for small scripts as well as for complex applications',
+				text: 'Dynamic languages such as JavaScript, Python, and Ruby, are popular since they are expressive, accessible to non-experts, and make deployment as easy as distributing a source ﬁle. They are used for small scripts as well as for complex applications',
 				sortIndex: '00000|001536|00584',
 				tags: [],
 				transferable: true
@@ -129,7 +133,7 @@ describe('PDF Worker', function () {
 				comment: 'A problem of nested loops',
 				color: '#6cc055',
 				pageLabel: '2',
-				text: 'Nested loops can be difficult to optimize for tracing VMs. In a na ̈ıve implementation, inner loops would become hot first, and the VM would start tracing there.',
+				text: 'Nested loops can be difﬁcult to optimize for tracing VMs. In a na¨ıve implementation, inner loops would become hot ﬁrst, and the VM would start tracing there.',
 				sortIndex: '00001|000459|00163',
 				tags: [],
 				transferable: true
