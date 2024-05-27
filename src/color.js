@@ -1,4 +1,4 @@
-function arrayColorToHex(color) {
+export function arrayColorToHex(color) {
 	if (!color || color.length !== 3) return '';
 
 	let result = '#';
@@ -9,5 +9,3 @@ function arrayColorToHex(color) {
 
 	return result;
 }
-
-exports.arrayColorToHex = arrayColorToHex;

@@ -1,7 +1,8 @@
-const { applyTransform, getBoundingBox, getCenter } = require('./common');
+import { applyTransform, getBoundingBox, getCenter } from './common.js';
+
 const NOTE_SIZE = 22;
 
-exports.writeRawAnnotations = async function (structure, annotations, fontEmbedder) {
+export async function writeRawAnnotations(structure, annotations, fontEmbedder) {
 	for (let annotation of annotations) {
 		let pageIndex = annotation.position.pageIndex;
 		let page = structure['/Root']['/Pages']['/Kids'][pageIndex];

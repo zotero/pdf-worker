@@ -2,7 +2,7 @@
 // Fonts for text (FreeText) annotations
 // Intervals are necessary to determine which font to use for which character and
 // can be generated with getUnicodeCharacterIntervals function
-exports.fonts = [
+export let fonts = [
 	{
 		fontName: '/LiberationSans-Regular',
 		fileName: 'LiberationSans-Regular.ttf',

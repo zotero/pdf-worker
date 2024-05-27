@@ -1,4 +1,4 @@
-const { ColorSpace } = require('../pdf.js/build/lib/core/colorspace');
+import { ColorSpace } from '../pdf.js/build/lib-legacy/core/colorspace.js';
 
 // The code below is extracted from pdf.js source because there was
 // no way to incorporate it directly or some modifications were necessary
@@ -119,7 +119,7 @@ function normalizeRect(rect) {
 	return r;
 }
 
-module.exports = {
+export {
 	intersect,
 	getColorArray,
 	normalizeRect

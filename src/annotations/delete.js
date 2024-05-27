@@ -1,5 +1,4 @@
-
-const { isTransferable } = require('./common');
+import { isTransferable } from './common.js';
 
 /**
  * Delete annotations that are supported and can be imported more or less losslessly
@@ -7,7 +6,7 @@ const { isTransferable } = require('./common');
  * @param structure
  * @returns {boolean}
  */
-exports.deleteAnnotations = function (structure) {
+export function deleteAnnotations(structure) {
 	let updated = false;
 	for (let pageIndex = 0; pageIndex < structure['/Root']['/Pages']['/Kids'].length; pageIndex++) {
 		let rawPage = structure['/Root']['/Pages']['/Kids'][pageIndex];
@@ -30,4 +29,4 @@ exports.deleteAnnotations = function (structure) {
 		}
 	}
 	return updated;
-};
+}

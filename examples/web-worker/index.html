@@ -15,6 +15,8 @@
         pageIndex: 0,
         rects: [[100, 100, 120, 120]]
       },
+	  color: '#FF0000',
+	  tags: [],
       comment: 'A test note',
       authorName: 'John',
       dateModified: '2019-04-19T08:21:13.011Z'
@@ -24,21 +26,21 @@
   let promiseId = 0;
   let waitingPromises = {};
   
-  let worker = new Worker('../../build/pdf-worker.js');
-  
-  async function query(op, data, transfer) {
+  let worker = new Worker('../../build/worker.js');
+
+  async function query(action, data, transfer) {
     return new Promise(function (resolve) {
       promiseId++;
       waitingPromises[promiseId] = resolve;
-      worker.postMessage({ id: promiseId, op, data }, transfer);
+      worker.postMessage({ id: promiseId, action, data }, transfer);
     });
   }
   
   worker.onmessage = async function (e) {
     let message = e.data;
     console.log('Message received', message);
-    if (message.responseId) {
-      let resolve = waitingPromises[message.responseId];
+    if (message.responseID) {
+      let resolve = waitingPromises[message.responseID];
       if (resolve) {
         resolve(message.data);
       }
@@ -53,11 +55,11 @@
           cMapData: new Uint8Array(await (await fetch('../../build/cmaps/' + message.data + '.bcmap')).arrayBuffer())
         };
       }
-      worker.postMessage({ responseId: e.data.id, data: respData });
+      worker.postMessage({ responseID: e.data.id, data: respData });
       return;
     }
   }
-  
+
   function handleFile() {
     let file = document.querySelector('input[type=file]').files[0];
     let arrayBuffer;
@@ -65,15 +67,15 @@
     fileReader.onload = async function (event) {
       arrayBuffer = event.target.result;
       let buf = arrayBuffer.slice();
-      let extractedAnnotations = await query('read', { buf }, [buf]);
+      let extractedAnnotations = await query('import', { buf, existingAnnotations: [] }, [buf]);
       console.log('Extracted annotations', extractedAnnotations);
-      
+
       buf = arrayBuffer.slice();
-      let fulltext = await query('fulltext', { buf }, [buf]);
+      let fulltext = await query('getFulltext', { buf }, [buf]);
       console.log('Extracted fulltext', fulltext);
-      
+
       buf = arrayBuffer.slice();
-      let data = await query('write', { buf, annotations }, [buf]);
+      let data = await query('export', { buf, annotations, password: '' }, [buf]);
       downloadFile(data.buf, 'test.pdf', 'application/pdf')
     };
     fileReader.readAsArrayBuffer(file);

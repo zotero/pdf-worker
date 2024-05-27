@@ -1,19 +1,19 @@
-const PDFAssembler = require('./pdfassembler');
-const { readRawAnnotations } = require('./annotations/read');
-const { writeRawAnnotations } = require('./annotations/write');
-const { deleteAnnotations } = require('./annotations/delete');
-const { getRangeByHighlight, getClosestOffset, flattenChars } = require('./text');
-const { Util } = require('../pdf.js/build/lib/shared/util');
-const { resizeAndFitRect, hasAnyAnnotations } = require('./annotations/read');
-const { textApproximatelyEqual } = require('./utils');
-const { LocalPdfManager } = require('../pdf.js/build/lib/core/pdf_manager');
-const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
-const { FontEmbedder } = require('./font/font-embedder');
-const { renderAnnotations } = require('./renderer');
+import { PDFAssembler } from './pdfassembler.js';
+import { readRawAnnotations } from './annotations/read.js';
+import { writeRawAnnotations } from './annotations/write.js';
+import { deleteAnnotations } from './annotations/delete.js';
+import { getRangeByHighlight, getClosestOffset } from './text.js';
+import { Util } from '../pdf.js/build/lib-legacy/shared/util.js';
+import { resizeAndFitRect, hasAnyAnnotations } from './annotations/read.js';
+import { textApproximatelyEqual } from './utils.js';
+import { LocalPdfManager } from '../pdf.js/build/lib-legacy/core/pdf_manager.js';
+import { XRefParseException } from '../pdf.js/build/lib-legacy/core/core_utils.js';
+import { FontEmbedder } from './font/font-embedder.js';
+import { renderAnnotations } from './renderer.js';
 
 // TODO: Highlights shouldn't be allowed to be outside of page view
 
-async function getPageData(pdfDocument, cmapProvider, standardFontProvider, data = {}) {
+async function getPageChars(pdfDocument, cmapProvider, standardFontProvider, pageIndex) {
 	let handler = {};
 	handler.send = function () {};
 	handler.sendWithPromise = async function (op, data) {
@@ -24,8 +24,23 @@ async function getPageData(pdfDocument, cmapProvider, standardFontProvider, data
 			return standardFontProvider(data.filename);
 		}
 	};
-	let task = { ensureNotTerminated() {} };
-	return pdfDocument.getPageData({ handler, task, data });
+	pdfDocument.pdfManager._handler = handler;
+	return pdfDocument.module.getPageChars(pageIndex);
+}
+
+async function getPageLabel(pdfDocument, cmapProvider, standardFontProvider, pageIndex) {
+	let handler = {};
+	handler.send = function () {};
+	handler.sendWithPromise = async function (op, data) {
+		if (op === 'FetchBuiltInCMap') {
+			return cmapProvider(data.name);
+		}
+		else if (op === 'FetchStandardFontData') {
+			return standardFontProvider(data.filename);
+		}
+	};
+	pdfDocument.pdfManager._handler = handler;
+	return pdfDocument.module.getPageLabel(pageIndex);
 }
 
 async function writeAnnotations(buf, annotations, password, cmapProvider, standardFontProvider) {
@@ -184,15 +199,14 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 		let pageIndex = annotation.position.pageIndex;
 		let page = await pdfDocument.getPage(pageIndex);
 		pageHeight = page.view[3];
-		let pageData = await getPageData(pdfDocument, cmapProvider, standardFontProvider, { pageIndex });
-		let { structuredText, pageLabel } = pageData;
-		let chars = flattenChars(structuredText);
+		let chars = await getPageChars(pdfDocument, cmapProvider, standardFontProvider, pageIndex);
+		let pageLabel = await getPageLabel(pdfDocument, cmapProvider, standardFontProvider, pageIndex);
 
 		annotation.pageLabel = pageLabel || (pageIndex + 1).toString();
 
 		let offset = 0;
 		if (['highlight', 'underline'].includes(annotation.type)) {
-			let range = getRangeByHighlight(structuredText, annotation.position.rects);
+			let range = getRangeByHighlight(chars, annotation.position.rects);
 			if (range) {
 				offset = range.offset;
 				annotation.text = range.text;
@@ -423,28 +437,15 @@ async function getFulltext(buf, password, pagesNum, cmapProvider, standardFontPr
 	let text = [];
 	let pageIndex = 0;
 	for (; pageIndex < pagesNum; pageIndex++) {
-		let { structuredText } = await getPageData(pdfManager.pdfDocument, cmapProvider, standardFontProvider, { pageIndex });
-		let { paragraphs } = structuredText;
-		for (let paragraph of paragraphs) {
-			for (let line of paragraph.lines) {
-				for (let word of line.words) {
-					for (let char of word.chars) {
-						text.push(char.c);
-					}
-					if (word.spaceAfter) {
-						text.push(' ');
-					}
-				}
-				if (line !== paragraph.lines.at(-1)) {
-					if (line.hyphenated) {
-						text.pop();
-					}
-					else {
-						text.push(' ');
-					}
+		let chars = await getPageChars(pdfManager.pdfDocument, cmapProvider, standardFontProvider, pageIndex);
+		for (let char of chars) {
+			if (!char.ignorable) {
+				text.push(char.c);
+				if (char.spaceAfter || char.lineBreakAfter && !char.paragraphBreakAfter) {
+					text.push(' ');
 				}
 			}
-			if (paragraph !== paragraphs.at(-1)) {
+			if (char.paragraphBreakAfter) {
 				text.push('\n');
 			}
 		}
@@ -453,7 +454,7 @@ async function getFulltext(buf, password, pagesNum, cmapProvider, standardFontPr
 			text.push('\f');
 		}
 	}
-	text = text.join('');
+	text = text.join('').trim();
 	return {
 		text,
 		extractedPages: pageIndex,
@@ -501,64 +502,71 @@ async function getRecognizerData(buf, password, cmapProvider, standardFontProvid
 
 		let fonts = [];
 
-		let pageData = await getPageData(pdfManager.pdfDocument, cmapProvider, standardFontProvider, { pageIndex });
-		let { paragraphs } = pageData.structuredText;
+		let chars = await getPageChars(pdfManager.pdfDocument, cmapProvider, standardFontProvider, pageIndex);
+		let lines = [];
+		let currentLine = [];
+		let currentWordChars = [];
+		for (let i = 0; i < chars.length; i++) {
+			let char = chars[i];
+			currentWordChars.push(char);
+			if (char.wordBreakAfter || i === chars.length - 1) {
+				let wordRect = [
+					Math.min(...currentWordChars.map(x => x.rect[0])),
+					Math.min(...currentWordChars.map(x => x.rect[1])),
+					Math.max(...currentWordChars.map(x => x.rect[2])),
+					Math.max(...currentWordChars.map(x => x.rect[3]))
+				];
+				let [xMin, yMin, xMax, yMax] = wordRect;
+				xMin = round(wordRect[0]);
+				xMax = round(wordRect[2]);
+				yMin = round(pageHeight - wordRect[3]);
+				yMax = round(pageHeight - wordRect[1]);
 
-		let newLines = [];
+				let firstChar = currentWordChars[0];
 
-		for (let paragraph of paragraphs) {
-			for (let line of paragraph.lines) {
-				let newLine = [];
-				for (let word of line.words) {
-					let [xMin, yMin, xMax, yMax] = word.rect;
-					xMin = round(word.rect[0]);
-					xMax = round(word.rect[2]);
-					yMin = round(pageHeight - word.rect[3]);
-					yMax = round(pageHeight - word.rect[1]);
-
-					let char = word.chars[0];
-
-					let fontIndex = fonts.indexOf(char.fontName);
-					if (fontIndex === -1) {
-						fonts.push(char.fontName);
-						fontIndex = fonts.length - 1;
-					}
-
-					let fontSize = round(char.fontSize);
-					let spaceAfter = word.spaceAfter ? 1 : 0;
-					let baseline = round(char.rotation === 0 ? round(pageHeight - char.baseline) : char.baseline);
-					let rotation = 0;
-					let underlined = 0;
-					let bold = char.bold ? 1 : 0;
-					let italic = char.italic ? 1 : 0;
-					let colorIndex = 0;
-					let text = word.chars.map(x => x.u).join('');
-
-					newLine.push([
-						xMin,
-						yMin,
-						xMax,
-						yMax,
-						fontSize,
-						spaceAfter,
-						baseline,
-						rotation,
-						underlined,
-						bold,
-						italic,
-						colorIndex,
-						fontIndex,
-						text
-					]);
+				let fontIndex = fonts.indexOf(firstChar.fontName);
+				if (fontIndex === -1) {
+					fonts.push(firstChar.fontName);
+					fontIndex = fonts.length - 1;
 				}
-				if (newLine.length) {
-					newLines.push([newLine]);
-				}
+
+				let fontSize = round(firstChar.fontSize);
+				let spaceAfter = currentWordChars.at(-1).spaceAfter ? 1 : 0;
+				let baseline = round(firstChar.rotation === 0 ? round(pageHeight - firstChar.baseline) : firstChar.baseline);
+				let rotation = 0;
+				let underlined = 0;
+				let bold = firstChar.bold ? 1 : 0;
+				let italic = firstChar.italic ? 1 : 0;
+				let colorIndex = 0;
+				let text = currentWordChars.map(x => x.u).join('');
+
+				currentLine.push([
+					xMin,
+					yMin,
+					xMax,
+					yMax,
+					fontSize,
+					spaceAfter,
+					baseline,
+					rotation,
+					underlined,
+					bold,
+					italic,
+					colorIndex,
+					fontIndex,
+					text
+				]);
+
+				currentWordChars = [];
+			}
+
+			if (char.lineBreakAfter) {
+				lines.push([currentLine]);
+				currentLine = [];
 			}
 		}
 
-
-		data.pages.push([pageWidth, pageHeight, [[[[0, 0, 0, 0, newLines]]]]]);
+		data.pages.push([pageWidth, pageHeight, [[[[0, 0, 0, 0, lines]]]]]);
 	}
 	return data;
 }
@@ -606,15 +614,14 @@ async function processAnnotations(annotations, pdf, cmapProvider, standardFontPr
 		let pageIndex = annotation.position.pageIndex;
 		let page = await pdfDocument.getPage(pageIndex);
 		pageHeight = page.view[3];
-		let pageData = await getPageData(pdfDocument, cmapProvider, standardFontProvider, { pageIndex });
-		let { structuredText, pageLabel } = pageData;
-		let chars = flattenChars(structuredText);
+		let chars = await getPageChars(pdfDocument, cmapProvider, standardFontProvider, pageIndex);
+		let pageLabel = await getPageLabel(pdfDocument, cmapProvider, standardFontProvider, pageIndex);
 
 		annotation.pageLabel = pageLabel || (pageIndex + 1).toString();
 
 		let offset = 0;
 		if (annotation.type === 'highlight') {
-			let range = getRangeByHighlight(structuredText, annotation.position.rects);
+			let range = getRangeByHighlight(chars, annotation.position.rects);
 			if (range) {
 				offset = range.offset;
 				annotation.text = (keepText && annotation.text) ? annotation.text : range.text;
@@ -969,7 +976,7 @@ if (typeof self !== 'undefined') {
 	};
 }
 
-module.exports = {
+export {
 	writeAnnotations,
 	importAnnotations,
 	deletePages,

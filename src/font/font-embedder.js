@@ -1,5 +1,5 @@
-const { TTFFont } = require('./ttffont');
-const { fonts } = require('./fonts');
+import { TTFFont } from './ttffont.js';
+import { fonts } from './fonts.js';
 
 // This function can be used to generate character intervals for fonts.js
 function getUnicodeCharacterIntervals(font) {
@@ -108,7 +108,7 @@ function escapeChar(char) {
 	return char;
 }
 
-class FontEmbedder {
+export class FontEmbedder {
 	constructor({ standardFontProvider }) {
 		this._fonts = [];
 		this._standardFontProvider = standardFontProvider;
@@ -263,5 +263,3 @@ class FontEmbedder {
 		Object.assign(ref, fontData);
 	}
 }
-
-exports.FontEmbedder = FontEmbedder;

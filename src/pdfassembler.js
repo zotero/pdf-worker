@@ -24,29 +24,27 @@
 
 // Slightly modified version of https://github.com/DevelopingMagic/pdfassembler
 
-const { LocalPdfManager } = require('../pdf.js/build/lib/core/pdf_manager');
-const { Dict, Name, Ref } = require('../pdf.js/build/lib/core/primitives');
+import { LocalPdfManager } from '../pdf.js/build/lib-legacy/core/pdf_manager.js';
+import { Dict, Name, Ref } from '../pdf.js/build/lib-legacy/core/primitives.js';
 
-const { BaseStream } = require('../pdf.js/build/lib/core/base_stream.js');
-const { Ascii85Stream } = require('../pdf.js/build/lib/core/ascii_85_stream.js');
-const { AsciiHexStream } = require('../pdf.js/build/lib/core/ascii_hex_stream.js');
-const { CCITTFaxStream } = require('../pdf.js/build/lib/core/ccitt_stream.js');
-const { FlateStream } = require('../pdf.js/build/lib/core/flate_stream.js');
-const { Jbig2Stream } = require('../pdf.js/build/lib/core/jbig2_stream.js');
-const { JpegStream } = require('../pdf.js/build/lib/core/jpeg_stream.js');
-const { JpxStream } = require('../pdf.js/build/lib/core/jpx_stream.js');
-const { LZWStream } = require('../pdf.js/build/lib/core/lzw_stream.js');
-const { NullStream, Stream } = require('../pdf.js/build/lib/core/stream.js');
-const { PredictorStream } = require('../pdf.js/build/lib/core/predictor_stream.js');
-const { RunLengthStream } = require('../pdf.js/build/lib/core/run_length_stream.js');
-const { DecodeStream } = require('../pdf.js/build/lib/core/decode_stream.js');
-const { DecryptStream } = require('../pdf.js/build/lib/core/decrypt_stream.js');
+import { BaseStream } from '../pdf.js/build/lib-legacy/core/base_stream.js';
+import { Ascii85Stream } from '../pdf.js/build/lib-legacy/core/ascii_85_stream.js';
+import { AsciiHexStream } from '../pdf.js/build/lib-legacy/core/ascii_hex_stream.js';
+import { CCITTFaxStream } from '../pdf.js/build/lib-legacy/core/ccitt_stream.js';
+import { FlateStream } from '../pdf.js/build/lib-legacy/core/flate_stream.js';
+import { Jbig2Stream } from '../pdf.js/build/lib-legacy/core/jbig2_stream.js';
+import { JpegStream } from '../pdf.js/build/lib-legacy/core/jpeg_stream.js';
+import { JpxStream } from '../pdf.js/build/lib-legacy/core/jpx_stream.js';
+import { LZWStream } from '../pdf.js/build/lib-legacy/core/lzw_stream.js';
+import { NullStream, Stream } from '../pdf.js/build/lib-legacy/core/stream.js';
+import { PredictorStream } from '../pdf.js/build/lib-legacy/core/predictor_stream.js';
+import { RunLengthStream } from '../pdf.js/build/lib-legacy/core/run_length_stream.js';
+import { DecodeStream } from '../pdf.js/build/lib-legacy/core/decode_stream.js';
+import { DecryptStream } from '../pdf.js/build/lib-legacy/core/decrypt_stream.js';
 
-const { XRefParseException } = require('../pdf.js/build/lib/core/core_utils');
-const { bytesToString, stringToBytes } = require('../pdf.js/build/lib/shared/util.js');
-const { deflate } = require('pako');
-
-
+import { XRefParseException } from '../pdf.js/build/lib-legacy/core/core_utils.js';
+import { bytesToString, stringToBytes } from '../pdf.js/build/lib-legacy/shared/util.js';
+import { deflate } from 'pako';
 
 /**
  * Gets length of the array (Array, Uint8Array, or string) in bytes.
@@ -98,7 +96,7 @@ function arraysToBytes(arr) {
 	return data;
 }
 
-class PDFAssembler {
+export class PDFAssembler {
 	constructor() {
 		this.pdfManager = null;
 		this.userPassword = '';
@@ -661,5 +659,3 @@ class PDFAssembler {
 		return bytesToString(bytes);
 	}
 }
-
-module.exports = PDFAssembler;

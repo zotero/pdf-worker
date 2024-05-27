@@ -38,7 +38,7 @@
  * jsPDF extension API Design *
  * ****************************/
 
-exports.TTFFont = (function() {
+export let TTFFont = (function() {
   /************************************************************************/
   /* function : open                                                       */
   /* comment : Decode the encoded ttf content and create a TTFFont object. */
@@ -1933,7 +1933,7 @@ var Subset = (function() {
   return Subset;
 })();
 
-exports.PDFObject = (function() {
+export let PDFObject = (function() {
   var pad;
 
   function PDFObject() {}

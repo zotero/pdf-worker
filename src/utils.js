@@ -1,6 +1,6 @@
-const { distance } = require('fastest-levenshtein');
+import { distance } from 'fastest-levenshtein';
 
-exports.quadPointsToRects = function (quadPoints) {
+export function quadPointsToRects(quadPoints) {
 	let rects = [];
 	for (let j = 0; j < quadPoints.length; j += 8) {
 		let topLeft = { x: quadPoints[j + 4], y: quadPoints[j + 5] };
@@ -12,9 +12,9 @@ exports.quadPointsToRects = function (quadPoints) {
 		rects.push([x, y, x + width, y + height]);
 	}
 	return rects;
-};
+}
 
-exports.pdfDateToIso = function (str) {
+export function pdfDateToIso(str) {
 	let m = str.match(/([0-9]{4})([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)([0-9]{2}|)/);
 	if (!m) {
 		return (new Date()).toISOString();
@@ -30,18 +30,18 @@ exports.pdfDateToIso = function (str) {
 	}
 
 	return (new Date(Date.UTC(...d))).toISOString();
-};
+}
 
-exports.normalizeText = function (text) {
+export function normalizeText(text) {
 	// Decompose and remove diacritics, spaces, all types of dashes
 	return text
 		.normalize('NFD')
 		.replace(/[\u0300-\u036f\s\x2D\u058A\u05BE\u1400\u1806\u2010-\u2015\u2E17\u2E1A\u2E3A\u2E3B\u301C\u3030\u30A0\uFE31\uFE32\uFE58\uFE63\uFF0D]/g, '')
 		.toLowerCase();
-};
+}
 
-exports.textApproximatelyEqual = function (a, b) {
-	a = exports.normalizeText(a);
-	b = exports.normalizeText(b);
+export function textApproximatelyEqual(a, b) {
+	a = normalizeText(a);
+	b = normalizeText(b);
 	return distance(a, b) < a.length * 0.1;
-};
+}

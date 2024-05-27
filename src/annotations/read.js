@@ -1,15 +1,13 @@
-const { stringToPDFString } = require('../../pdf.js/build/lib/shared/util');
-const { arrayColorToHex } = require('../color');
-const { getRawPageView, getString, isValidNumber, getAnnotationID, isTransferable } = require('./common');
+import { stringToPDFString } from '../../pdf.js/build/lib-legacy/shared/util.js';
+import { arrayColorToHex } from '../color.js';
+import { getRawPageView, getString, isValidNumber, getAnnotationID, isTransferable } from './common.js';
 
-const utils = require('../utils');
-const putils = require('../putils');
+import * as utils from '../utils.js';
+import * as putils from '../putils.js';
 
 const NOTE_SIZE = 22;
 
-
-
-exports.readRawAnnotations = function (structure) {
+export function readRawAnnotations(structure) {
 	let annotations = [];
 	let rawPages = structure['/Root']['/Pages']['/Kids'];
 	for (let pageIndex = 0; pageIndex < rawPages.length; pageIndex++) {
@@ -19,7 +17,7 @@ exports.readRawAnnotations = function (structure) {
 			let rawAnnot = rawAnnots[rawAnnotIdx];
 			if (!rawAnnot) continue;
 			let view = getRawPageView(rawPages[pageIndex]);
-			let annotation = exports.readRawAnnotation(rawAnnot, pageIndex, view);
+			let annotation = readRawAnnotation(rawAnnot, pageIndex, view);
 			if (annotation) {
 				annotations.push(annotation);
 			}
@@ -27,9 +25,9 @@ exports.readRawAnnotations = function (structure) {
 	}
 
 	return annotations;
-};
+}
 
-exports.hasAnyAnnotations = function (structure) {
+export function hasAnyAnnotations(structure) {
 	let rawPages = structure['/Root']['/Pages']['/Kids'];
 	for (let pageIndex = 0; pageIndex < rawPages.length; pageIndex++) {
 		let rawAnnots = rawPages[pageIndex] && rawPages[pageIndex]['/Annots'];
@@ -64,9 +62,9 @@ exports.hasAnyAnnotations = function (structure) {
 	}
 
 	return false;
-};
+}
 
-function resizeAndFitRect(rect, width, height, view) {
+export function resizeAndFitRect(rect, width, height, view) {
 	let point = [rect[0] + (rect[2] - rect[0]) / 2, rect[1] + (rect[3] - rect[1]) / 2];
 	rect = [
 		point[0] - NOTE_SIZE / 2,
@@ -98,9 +96,7 @@ function resizeAndFitRect(rect, width, height, view) {
 	return rect;
 }
 
-exports.resizeAndFitRect = resizeAndFitRect;
-
-exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
+export function readRawAnnotation(rawAnnot, pageIndex, view) {
 	let type = rawAnnot['/Subtype'];
 	if (!type) {
 		return null;
@@ -253,4 +249,4 @@ exports.readRawAnnotation = function (rawAnnot, pageIndex, view) {
 	annotation.transferable = isTransferable(rawAnnot);
 
 	return annotation;
-};
+}

@@ -63,8 +63,8 @@ function getCenterRect(r) {
 	];
 }
 
-function getRangeByHighlight(structuredText, rects) {
-	let chars = flattenChars(structuredText);
+
+function getRangeByHighlight(chars, rects) {
 	if (!chars.length) {
 		return null;
 	}
@@ -91,7 +91,7 @@ function getRangeByHighlight(structuredText, rects) {
 		return null;
 	}
 
-	let range = getRange(structuredText, anchorOffset, headOffset);
+	let range = getRange(chars, anchorOffset, headOffset);
 	range.offset = range.anchorOffset;
 	range.from = range.anchorOffset;
 	range.to = range.headOffset;
@@ -119,7 +119,47 @@ function getLineSelectionRect(line, charFrom, charTo) {
 	}
 }
 
-function getRange(structuredText, anchorOffset, headOffset) {
+function getRectsFromChars(chars) {
+	let lineRects = [];
+	let currentLineRect = null;
+	for (let char of chars) {
+		if (!currentLineRect) {
+			currentLineRect = char.inlineRect.slice();
+		}
+		currentLineRect = [
+			Math.min(currentLineRect[0], char.inlineRect[0]),
+			Math.min(currentLineRect[1], char.inlineRect[1]),
+			Math.max(currentLineRect[2], char.inlineRect[2]),
+			Math.max(currentLineRect[3], char.inlineRect[3])
+		];
+		if (char.lineBreakAfter) {
+			lineRects.push(currentLineRect);
+			currentLineRect = null;
+		}
+	}
+	if (currentLineRect) {
+		lineRects.push(currentLineRect);
+	}
+	return lineRects;
+}
+
+function getTextFromChars(chars) {
+	let text = [];
+	for (let char of chars) {
+		if (!char.ignorable) {
+			text.push(char.c);
+			if (char.spaceAfter || char.lineBreakAfter) {
+				text.push(' ');
+			}
+		}
+		if (char.paragraphBreakAfter) {
+			text.push(' ');
+		}
+	}
+	return text.join('').trim();
+}
+
+function getRange(chars, anchorOffset, headOffset) {
 	let charStart;
 	let charEnd;
 	if (anchorOffset < headOffset) {
@@ -134,95 +174,14 @@ function getRange(structuredText, anchorOffset, headOffset) {
 		return { collapsed: true, anchorOffset, headOffset, rects: [], text: '' };
 	}
 
-	// Get text
-	let text = [];
-	let extracting = false;
-
-	let { paragraphs } = structuredText;
-
-	let n = 0;
-
-	loop1: for (let paragraph of paragraphs) {
-		for (let line of paragraph.lines) {
-			for (let word of line.words) {
-				for (let char of word.chars) {
-					if (n === charStart) {
-						extracting = true;
-					}
-					if (extracting) {
-						text.push(char.c);
-					}
-					if (n === charEnd) {
-						break loop1;
-					}
-					n++;
-				}
-				if (extracting && word.spaceAfter) {
-					text.push(' ');
-				}
-			}
-			if (line !== paragraph.lines.at(-1)) {
-				if (line.hyphenated) {
-					text.pop();
-				}
-				else {
-					text.push(' ');
-				}
-			}
-		}
-	}
-	text = text.join('').trim();
-	// Get rects
-	extracting = false;
-	let rects = [];
-	n = 0;
-	loop2: for (let paragraph of paragraphs) {
-		for (let line of paragraph.lines) {
-			let charFrom = null;
-			let charTo = null;
-			for (let word of line.words) {
-				for (let char of word.chars) {
-					if (n === charStart || extracting && !charFrom) {
-						charFrom = char;
-						extracting = true;
-					}
-					if (extracting) {
-						charTo = char;
-						if (n === charEnd) {
-							rects.push(getLineSelectionRect(line, charFrom, charTo));
-							break loop2;
-						}
-					}
-					n++;
-				}
-			}
-			if (extracting && charFrom && charTo) {
-				rects.push(getLineSelectionRect(line, charFrom, charTo));
-				charFrom = null;
-			}
-		}
-	}
-
+	let rangeChars = chars.slice(charStart, charEnd + 1);
+	let text = getTextFromChars(rangeChars);
+	let rects = getRectsFromChars(rangeChars);
 	rects = rects.map(rect => rect.map(value => parseFloat(value.toFixed(3))));
 	return { anchorOffset, headOffset, rects, text };
 }
 
-function flattenChars(structuredText) {
-	let flatCharsArray = [];
-	for (let paragraph of structuredText.paragraphs) {
-		for (let line of paragraph.lines) {
-			for (let word of line.words) {
-				for (let charObj of word.chars) {
-					flatCharsArray.push(charObj);
-				}
-			}
-		}
-	}
-	return flatCharsArray;
-}
-
-module.exports = {
+export {
 	getClosestOffset,
-	getRangeByHighlight,
-	flattenChars
+	getRangeByHighlight
 };

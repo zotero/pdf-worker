@@ -1,3 +1,8 @@
+import * as pdfjsWorker from '../pdf.js/build/lib-legacy/pdf.worker.js';
+import * as pdfjs from '../pdf.js/build/lib-legacy/pdf.js';
+
+self.pdfjsWorker = pdfjsWorker;
+
 const SCALE = 4;
 const PATH_BOX_PADDING = 10; // pt
 const MIN_PATH_BOX_SIZE = 30; // pt
@@ -163,8 +168,6 @@ async function renderImage(pdfDocument, annotation) {
 }
 
 export async function renderAnnotations(libraryID, buf, annotations, password, cmapProvider, standardFontProvider, renderedAnnotationSaver) {
-	self.pdfjsWorker = require('../pdf.js/build/lib/pdf.worker');
-	let pdfjs = require('../pdf.js/build/lib/pdf');
 	let document = {
 		fonts: self.fonts,
 		createElement: (name) => {

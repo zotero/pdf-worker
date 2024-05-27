@@ -1,4 +1,4 @@
-const { isArrayEqual, Util } = require('../../pdf.js/build/lib/shared/util');
+import { isArrayEqual, Util } from '../../pdf.js/build/lib-legacy/shared/util.js';
 
 function applyTransform(p, m) {
 	const xt = p[0] * m[0] + p[1] * m[2] + m[4];
@@ -75,7 +75,7 @@ function isTransferable(rawAnnot) {
 		|| ['/Square', '/Ink', '/FreeText'].includes(rawAnnot['/Subtype']) && id);
 }
 
-module.exports = {
+export {
 	applyTransform,
 	getBoundingBox,
 	getCenter,

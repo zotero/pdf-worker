@@ -20,10 +20,18 @@ module.exports = {
 	module: {
 		rules: [
 			{
-				test: /\.(js|jsx)$/,
-				exclude: /node_modules/
-			}
-		]
+				test: /\.(js)$/,
+				exclude: /node_modules/,
+				use: {
+					loader: 'babel-loader',
+					options: {
+						compact: false,
+						retainLines: true,
+						presets: [['@babel/preset-env']],
+					},
+				},
+			},
+		],
 	},
 	plugins: [
 		// Ignore objects that only exist on browser and break webpack building process
