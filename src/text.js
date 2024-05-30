@@ -152,7 +152,9 @@ function getTextFromChars(chars) {
 				text.push(' ');
 			}
 		}
-		if (char.paragraphBreakAfter) {
+		// OCRed PDFs sometimes result in each line being a separate paragraph
+		// while, normal PDFs only need this when paragraph is wrapped to another column
+		if (!char.ignorable && char.paragraphBreakAfter) {
 			text.push(' ');
 		}
 	}
