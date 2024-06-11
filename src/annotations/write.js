@@ -62,7 +62,7 @@ function colorToRaw(hex) {
 // D:20190429115637+03'00'
 function dateToRaw(str) {
 	return 'D:' + (new Date(str)).toISOString().slice(0, 19)
-	.replace(/[^0-9]/g, '');
+	.replace(/[^0-9]/g, '') + "Z00'00'";
 }
 
 function calculateLines(chars, fontSize, maxWidth) {
