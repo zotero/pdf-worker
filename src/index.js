@@ -28,7 +28,7 @@ async function getPageChars(pdfDocument, cmapProvider, standardFontProvider, pag
 	return pdfDocument.module.getPageChars(pageIndex);
 }
 
-async function getPageLabel(pdfDocument, cmapProvider, standardFontProvider, pageIndex) {
+async function getPageLabels(pdfDocument, cmapProvider, standardFontProvider) {
 	let handler = {};
 	handler.send = function () {};
 	handler.sendWithPromise = async function (op, data) {
@@ -40,7 +40,7 @@ async function getPageLabel(pdfDocument, cmapProvider, standardFontProvider, pag
 		}
 	};
 	pdfDocument.pdfManager._handler = handler;
-	return pdfDocument.module.getPageLabel(pageIndex);
+	return pdfDocument.module.getPageLabels();
 }
 
 async function writeAnnotations(buf, annotations, password, cmapProvider, standardFontProvider) {
@@ -194,15 +194,16 @@ async function importAnnotations(buf, existingAnnotations, password, transfer, c
 		imported = splitAnnotations(imported);
 	}
 
+	let pageLabels = await getPageLabels(pdfDocument, cmapProvider, standardFontProvider);
+
 	let pageHeight;
 	for (let annotation of imported) {
 		let pageIndex = annotation.position.pageIndex;
 		let page = await pdfDocument.getPage(pageIndex);
 		pageHeight = page.view[3];
 		let chars = await getPageChars(pdfDocument, cmapProvider, standardFontProvider, pageIndex);
-		let pageLabel = await getPageLabel(pdfDocument, cmapProvider, standardFontProvider, pageIndex);
 
-		annotation.pageLabel = pageLabel || (pageIndex + 1).toString();
+		annotation.pageLabel = pageLabels[pageIndex];
 
 		let offset = 0;
 		if (['highlight', 'underline'].includes(annotation.type)) {
@@ -610,14 +611,13 @@ async function processAnnotations(annotations, pdf, cmapProvider, standardFontPr
 	const pdfDocument = pdf.pdfManager.pdfDocument;
 	annotations = splitAnnotations(annotations);
 
+	let pageLabels = await getPageLabels(pdfDocument, cmapProvider, standardFontProvider);
 	for (let annotation of annotations) {
 		let pageIndex = annotation.position.pageIndex;
 		let page = await pdfDocument.getPage(pageIndex);
 		pageHeight = page.view[3];
 		let chars = await getPageChars(pdfDocument, cmapProvider, standardFontProvider, pageIndex);
-		let pageLabel = await getPageLabel(pdfDocument, cmapProvider, standardFontProvider, pageIndex);
-
-		annotation.pageLabel = pageLabel || (pageIndex + 1).toString();
+		annotation.pageLabel = pageLabels[pageIndex];
 
 		let offset = 0;
 		if (annotation.type === 'highlight') {
