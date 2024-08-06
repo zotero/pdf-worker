@@ -360,10 +360,10 @@ async function annotationToRaw(annotation, fontEmbedder) {
 	else if (annotation.type === 'highlight') {
 		let p = '';
 		for (let rect of annotation.position.rects) {
-			p += rect[0] + ' ' + rect[1] + ' m\r';
-			p += rect[2] + ' ' + rect[1] + ' l\r';
-			p += rect[2] + ' ' + rect[3] + ' l\r';
-			p += rect[0] + ' ' + rect[3] + ' l\rh\r';
+			p += rect[0] + ' ' + rect[1] + ' m\n';
+			p += rect[2] + ' ' + rect[1] + ' l\n';
+			p += rect[2] + ' ' + rect[3] + ' l\n';
+			p += rect[0] + ' ' + rect[3] + ' l\nh\n';
 		}
 
 		let res = {
@@ -398,7 +398,7 @@ async function annotationToRaw(annotation, fontEmbedder) {
 					},
 					'/Subtype': '/Form',
 					'/Type': '/XObject',
-					stream: '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' rg\r' + p + 'f\r',
+					stream: '/G0 gs\n' + colorToRaw(annotation.color).join(' ') + ' rg\n' + p + 'f\n',
 					num: 0,
 					gen: 0
 				}
@@ -420,10 +420,10 @@ async function annotationToRaw(annotation, fontEmbedder) {
 	else if (annotation.type === 'underline') {
 		let p = '';
 		for (let rect of annotation.position.rects) {
-			p += rect[0] + ' ' + rect[1] + ' m\r';
-			p += rect[2] + ' ' + rect[1] + ' l\r';
-			p += rect[2] + ' ' + (rect[1] + 3) + ' l\r';
-			p += rect[0] + ' ' + (rect[1] + 3) + ' l\rh\r';
+			p += rect[0] + ' ' + rect[1] + ' m\n';
+			p += rect[2] + ' ' + rect[1] + ' l\n';
+			p += rect[2] + ' ' + (rect[1] + 3) + ' l\n';
+			p += rect[0] + ' ' + (rect[1] + 3) + ' l\nh\n';
 		}
 
 		let res = {
@@ -458,7 +458,7 @@ async function annotationToRaw(annotation, fontEmbedder) {
 					},
 					'/Subtype': '/Form',
 					'/Type': '/XObject',
-					stream: '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' rg\r' + p + 'f\r',
+					stream: '/G0 gs\n' + colorToRaw(annotation.color).join(' ') + ' rg\n' + p + 'f\n',
 					num: 0,
 					gen: 0
 				}
@@ -513,7 +513,7 @@ async function annotationToRaw(annotation, fontEmbedder) {
 					},
 					'/Subtype': '/Form',
 					'/Type': '/XObject',
-					stream: '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' RG\r0 0 0 0 k\r2 w\r[] 0 d\r' + p + ' re\rS\r',
+					stream: '/G0 gs\n' + colorToRaw(annotation.color).join(' ') + ' RG\n0 0 0 0 k\n2 w\n[] 0 d\n' + p + ' re\nS\n',
 					num: 0,
 					gen: 0
 				}
@@ -536,14 +536,19 @@ async function annotationToRaw(annotation, fontEmbedder) {
 				let y = path[i + 1];
 
 				if (i === 0) {
-					p += `${x} ${y} m\r`;
+					p += `${x} ${y} m\n`;
 				}
 				else {
-					p += `${x} ${y} l\r`;
+					p += `${x} ${y} l\n`;
 				}
 			}
-			// p += `h\r`;
 		}
+
+		let { width } = annotation.position;
+		containerRect[0] -= width;
+		containerRect[1] -= width;
+		containerRect[2] += width;
+		containerRect[3] += width;
 
 		let res = {
 			'/Type': '/Annot',
@@ -570,9 +575,10 @@ async function annotationToRaw(annotation, fontEmbedder) {
 					'/Resources': {
 						'/ExtGState': {
 							'/G0': {
-								'/BM': '/Multiply',
 								'/CA': 1,
 								'/ca': 1,
+								'/LC': 1,
+								'/LJ': 1,
 								num: 0,
 								gen: 0
 							},
@@ -582,7 +588,7 @@ async function annotationToRaw(annotation, fontEmbedder) {
 					},
 					'/Subtype': '/Form',
 					'/Type': '/XObject',
-					stream: '/G0 gs\r' + colorToRaw(annotation.color).join(' ') + ' RG\r' + annotation.position.width + ' w\n' + p + 'S\r',
+					stream: '/G0 gs\n' + colorToRaw(annotation.color).join(' ') + ' RG\n' + annotation.position.width + ' w\n' + p + 'S\n',
 					num: 0,
 					gen: 0
 				}
