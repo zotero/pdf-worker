@@ -295,8 +295,11 @@ export class PDFAssembler {
 		else if (typeof node === 'object' && node !== null) {
 			const objectNode = Object.create(null);
 			let source = null;
-			const nodeMap = node.dict instanceof Dict ? node.dict._map : node instanceof Dict ? node._map : null;
+			let nodeMap = node.dict instanceof Dict ? node.dict._map : node instanceof Dict ? node._map : null;
 			if (nodeMap) {
+				if (nodeMap instanceof Map) {
+					nodeMap = Object.fromEntries(nodeMap);
+				}
 				for (let key of Object.keys(nodeMap)) {
 					objectNode[`/${key}`] = this.resolveNodeRefs(nodeMap[key], `/${key}`, objectNode, !!nodeMap.Contents);
 				}
