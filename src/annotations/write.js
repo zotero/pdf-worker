@@ -222,10 +222,10 @@ async function annotationToRaw(annotation, fontEmbedder) {
 			let lines;
 			let n = 0;
 			// Reduce font size to fit the text within the annotation area
-			while (n++ < 20 && fontSize > 4) {
+			while (n++ < 20) {
 				maxLines = Math.floor(height / (fontSize * lineHeightMultiplier));
 				lines = calculateLines(chars, fontSize, width);
-				if (lines.length > maxLines) {
+				if (lines.length > maxLines && fontSize > 4) {
 					fontSize -= 0.5;
 					continue;
 				}
