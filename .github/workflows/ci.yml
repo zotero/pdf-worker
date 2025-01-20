@@ -43,7 +43,7 @@ jobs:
         run: |
           cd build
           mkdir build-zip
-          zip -r build-zip/$GITHUB_SHA.zip worker.js
+          zip -r build-zip/$GITHUB_SHA.zip worker.js cmaps standard_fonts
           sudo gem install --no-document dpl dpl-s3
           dpl --provider=s3 --bucket=zotero-download --local-dir=build-zip --upload-dir=ci/client-pdf-worker --acl=public-read --skip_cleanup=true
 
