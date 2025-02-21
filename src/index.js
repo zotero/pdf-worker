@@ -456,6 +456,9 @@ async function getFulltext(buf, password, pagesNum, cmapProvider, standardFontPr
 		}
 	}
 	text = text.join('').trim();
+	// Normalize text by precomposing characters and accents into single composed characters
+	// to prevent indexing issues
+	text = text.normalize('NFC');
 	return {
 		text,
 		extractedPages: pageIndex,
