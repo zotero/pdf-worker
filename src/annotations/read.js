@@ -200,6 +200,8 @@ export function readRawAnnotation(rawAnnot, pageIndex, view) {
 		if (!isValidNumber(rotation)) {
 			return null;
 		}
+		// Normalize degrees
+		rotation = ((rotation % 360) + 360) % 360;
 		rotation = Math.round(rotation);
 
 		fontSize = rawAnnot['/Zotero:FontSize'];

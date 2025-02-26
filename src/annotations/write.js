@@ -179,8 +179,10 @@ async function annotationToRaw(annotation, fontEmbedder) {
 		return res;
 	}
 	else if (annotation.type === 'text') {
+		// Normalize degrees
+		let normalizedRotation = ((annotation.position.rotation % 360) + 360) % 360;
 		// Integer
-		let roundedDegrees = Math.round(annotation.position.rotation);
+		let roundedDegrees = Math.round(normalizedRotation);
 		// One decimal place
 		let roundedFontSize = Math.round(annotation.position.fontSize * 10) / 10;
 		let res = {
