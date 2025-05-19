@@ -429,20 +429,31 @@ async function getPdfManager(arrayBuffer, recoveryMode) {
 	return pdfManager;
 }
 
-async function getFulltext(buf, password, pagesNum, cmapProvider, standardFontProvider) {
+async function getFulltext(buf, pages, password, cmapProvider, standardFontProvider) {
 	let pdfManager = await getPdfManager(buf);
 	let actualCount = pdfManager.pdfDocument.numPages;
-	if (!Number.isInteger(pagesNum) || pagesNum > actualCount) {
-		pagesNum = actualCount;
+
+	let pageIndexes;
+	if (Number.isInteger(pages)) {
+		// pages is a single integer
+		let pagesNum = Math.min(pages, actualCount);
+		pageIndexes = Array.from({ length: pagesNum }, (_, i) => i);
+	} else if (Array.isArray(pages)) {
+		// pages is an array of specific page indices
+		pageIndexes = pages.filter(i => i >= 0 && i < actualCount);
+	} else {
+		// default to all pages if invalid input
+		pageIndexes = Array.from({ length: actualCount }, (_, i) => i);
 	}
+
 	let text = [];
-	let pageIndex = 0;
-	for (; pageIndex < pagesNum; pageIndex++) {
+	for (let i = 0; i < pageIndexes.length; i++) {
+		let pageIndex = pageIndexes[i];
 		let chars = await getPageChars(pdfManager.pdfDocument, cmapProvider, standardFontProvider, pageIndex);
 		for (let char of chars) {
 			if (!char.ignorable) {
 				text.push(char.c);
-				if (char.spaceAfter || char.lineBreakAfter && !char.paragraphBreakAfter) {
+				if (char.spaceAfter || (char.lineBreakAfter && !char.paragraphBreakAfter)) {
 					text.push(' ');
 				}
 			}
@@ -451,17 +462,18 @@ async function getFulltext(buf, password, pagesNum, cmapProvider, standardFontPr
 			}
 		}
 		text.push('\n\n');
-		if (pageIndex !== pagesNum - 1) {
+		if (i !== pageIndexes.length - 1) {
 			text.push('\f');
 		}
 	}
-	text = text.join('').trim();
+
 	// Normalize text by precomposing characters and accents into single composed characters
 	// to prevent indexing issues
-	text = text.normalize('NFC');
+	text = text.join('').trim().normalize('NFC');
+
 	return {
 		text,
-		extractedPages: pageIndex,
+		extractedPages: pageIndexes.length,
 		totalPages: actualCount
 	};
 }
@@ -908,8 +920,8 @@ if (typeof self !== 'undefined') {
 			try {
 				let data = await getFulltext(
 					message.data.buf,
+					message.data.maxPages || message.data.pageIndexes,
 					message.data.password,
-					message.data.maxPages,
 					cmapProvider,
 					standardFontProvider
 				);
