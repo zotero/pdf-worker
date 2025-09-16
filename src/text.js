@@ -65,13 +65,14 @@ function getCenterRect(r) {
 
 
 function getRangeByHighlight(chars, rects) {
+	// Note: rects may not be in order, so we find the first and last occurrence in chars
 	if (!chars.length) {
 		return null;
 	}
 	let anchorOffset = Infinity;
 	for (let i = 0; i < chars.length; i++) {
 		let char = chars[i];
-		if (quickIntersectRect(getCenterRect(char.rect), rects[0])) {
+		if (rects.some(rect => quickIntersectRect(getCenterRect(char.rect), rect))) {
 			anchorOffset = i;
 			break;
 		}
@@ -79,7 +80,7 @@ function getRangeByHighlight(chars, rects) {
 	let headOffset = 0;
 	for (let i = chars.length - 1; i >= 0; i--) {
 		let char = chars[i];
-		if (quickIntersectRect(getCenterRect(char.rect), rects[rects.length - 1])) {
+		if (rects.some(rect => quickIntersectRect(getCenterRect(char.rect), rect))) {
 			headOffset = i;
 			break;
 		}
