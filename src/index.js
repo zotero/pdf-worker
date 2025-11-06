@@ -17,11 +17,16 @@ async function getPageChars(pdfDocument, cmapProvider, standardFontProvider, pag
 	let handler = {};
 	handler.send = function () {};
 	handler.sendWithPromise = async function (op, data) {
-		if (op === 'FetchBuiltInCMap') {
-			return cmapProvider(data.name);
-		}
-		else if (op === 'FetchStandardFontData') {
-			return standardFontProvider(data.filename);
+		if (op === 'FetchBinaryData') {
+			if (data.type === 'cMapReaderFactory') {
+				return cmapProvider(data.name);
+			}
+			else if (data.type === 'standardFontDataFactory') {
+				return standardFontProvider(data.filename);
+			}
+			else {
+				console.warn(`Unknown data type: ${data.type}`);
+			}
 		}
 	};
 	pdfDocument.pdfManager._handler = handler;
@@ -778,6 +783,15 @@ async function standardFontProvider(filename) {
 	return data;
 }
 
+async function wasmProvider(filename) {
+	if (fontCache[filename]) {
+		return fontCache[filename];
+	}
+	let data = await query('FetchWasm', filename);
+	fontCache[filename] = data;
+	return data;
+}
+
 async function renderedAnnotationSaver(libraryID, annotationKey, buf) {
 	return await query('SaveRenderedAnnotation', { libraryID, annotationKey, buf }, [buf]);
 }
@@ -960,6 +974,7 @@ if (typeof self !== 'undefined') {
 					message.data.password,
 					cmapProvider,
 					standardFontProvider,
+					wasmProvider,
 					renderedAnnotationSaver
 				);
 				self.postMessage({ responseID: message.id, data }, []);

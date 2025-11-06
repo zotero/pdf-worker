@@ -167,7 +167,7 @@ async function renderImage(pdfDocument, annotation) {
 	return canvas;
 }
 
-export async function renderAnnotations(libraryID, buf, annotations, password, cmapProvider, standardFontProvider, renderedAnnotationSaver) {
+export async function renderAnnotations(libraryID, buf, annotations, password, cmapProvider, standardFontProvider, wasmProvider, renderedAnnotationSaver) {
 	let document = {
 		fonts: self.fonts,
 		createElement: (name) => {
@@ -187,6 +187,9 @@ export async function renderAnnotations(libraryID, buf, annotations, password, c
 		},
 		StandardFontDataFactory: function () {
 			this.fetch = async ({ filename }) => standardFontProvider(filename);
+		},
+		WasmFactory: function () {
+			this.fetch = async ({ filename }) => wasmProvider(filename);
 		},
 	}).promise;
 

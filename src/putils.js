@@ -1,4 +1,4 @@
-import { ColorSpace } from '../pdf.js/build/lib-legacy/core/colorspace.js';
+import { DeviceCmykCS, DeviceGrayCS, DeviceRgbCS } from '../pdf.js/build/lib-legacy/core/colorspace.js';
 
 // The code below is extracted from pdf.js source because there was
 // no way to incorporate it directly or some modifications were necessary
@@ -17,6 +17,11 @@ import { ColorSpace } from '../pdf.js/build/lib-legacy/core/colorspace.js';
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+// Create local singletons matching the new ColorSpace API
+const GRAY_CS = new DeviceGrayCS();
+const RGB_CS = new DeviceRgbCS();
+const CMYK_CS = new DeviceCmykCS();
 
 // Returns a rectangle [x1, y1, x2, y2] corresponding to the
 // intersection of rect1 and rect2. If no intersection, returns 'false'
@@ -81,17 +86,17 @@ function getColorArray(color) {
 			break;
 
 		case 1: // Convert grayscale to RGB
-			ColorSpace.singletons.gray.getRgbItem(color, 0, rgbColor, 0);
+			GRAY_CS.getRgbItem(color, 0, rgbColor, 0);
 			value = rgbColor;
 			break;
 
-		case 3: // Convert RGB percentages to RGB
-			ColorSpace.singletons.rgb.getRgbItem(color, 0, rgbColor, 0);
+		case 3: // Convert RGB [0,1] to sRGB bytes
+			RGB_CS.getRgbItem(color, 0, rgbColor, 0);
 			value = rgbColor;
 			break;
 
 		case 4: // Convert CMYK to RGB
-			ColorSpace.singletons.cmyk.getRgbItem(color, 0, rgbColor, 0);
+			CMYK_CS.getRgbItem(color, 0, rgbColor, 0);
 			value = rgbColor;
 			break;
 

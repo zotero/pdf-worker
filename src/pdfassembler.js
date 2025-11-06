@@ -234,7 +234,7 @@ export class PDFAssembler {
 				file.buffer : new ArrayBuffer(0);
 	}
 
-	resolveNodeRefs(node = this.pdfManager.pdfDocument.catalog._catDict, name, parent, contents = false) {
+	resolveNodeRefs(node = this.pdfManager.pdfDocument.catalog.xref.root, name, parent, contents = false) {
 		if (node instanceof Ref) {
 			const refKey = `${node.num}-${node.gen}`;
 			if (this.objCache[refKey] === undefined) {
