@@ -406,27 +406,25 @@ async function rotatePages(buf, pageIndexes, degrees, password) {
 	return pdf.assemblePdf('ArrayBuffer');
 }
 
-async function getPdfManager(arrayBuffer, recoveryMode) {
+async function getPdfManager(arrayBuffer, password) {
 	const pdfManagerArgs = {
 		source: arrayBuffer,
 		evaluatorOptions: {
 			cMapUrl: null,
-			standardFontDataUrl: null
+			standardFontDataUrl: null,
+			ignoreErrors: true
 		},
-		password: ''
+		password
 	};
 	let pdfManager = new LocalPdfManager(pdfManagerArgs);
 	await pdfManager.ensureDoc('checkHeader', []);
 	await pdfManager.ensureDoc('parseStartXRef', []);
 	// Enter into recovery mode if the initial parse fails
 	try {
-		await pdfManager.ensureDoc('parse', [recoveryMode]);
+		await pdfManager.ensureDoc('parse', []);
 	}
 	catch (e) {
-		if (!(e instanceof XRefParseException) && !recoveryMode) {
-			throw e;
-		}
-		recoveryMode = true;
+		let recoveryMode = true;
 		await pdfManager.ensureDoc('parse', [recoveryMode]);
 	}
 	await pdfManager.ensureDoc('numPages');

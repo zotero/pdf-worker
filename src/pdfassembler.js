@@ -127,7 +127,8 @@ export class PDFAssembler {
 					source: arrayBuffer,
 					evaluatorOptions: {
 						cMapUrl: null,
-						standardFontDataUrl: null
+						standardFontDataUrl: null,
+						ignoreErrors: true
 					},
 					password: userPassword
 				};
