@@ -1,4 +1,5 @@
 import { applyTransform, getBoundingBox, getCenter } from './common.js';
+import { stringToAsciiOrUTF16BE } from '../../pdf.js/build/lib-legacy/core/core_utils.js';
 
 const NOTE_SIZE = 22;
 
@@ -38,13 +39,7 @@ function rectsToQuads(rects) {
 }
 
 function stringToRaw(text) {
-	let out = [];
-	for (let c of text) {
-		c = c.charCodeAt(0);
-		out.push(String.fromCharCode(c >> 8));
-		out.push(String.fromCharCode(c & 0xFF));
-	}
-	return 'þÿ' + out.join('');
+	return stringToAsciiOrUTF16BE(text);
 }
 
 function colorToRaw(hex) {
