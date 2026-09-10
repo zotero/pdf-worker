@@ -656,7 +656,7 @@ async function getProcessedData(buf, password, dataProvider) {
 }
 
 async function getStructure(buf, password, dataProvider, options = {}) {
-	let pdfManager = await getPdfManager(buf);
+	let pdfManager = await getPdfManager(buf, password);
 	setHandler(pdfManager.pdfDocument, dataProvider);
 
 	let useNativeONNX = typeof options.nativeONNXRun === 'function';
