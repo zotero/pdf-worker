@@ -1,5 +1,6 @@
+import { distance } from 'fastest-levenshtein';
 import { getBlockPlainText } from '../../../../structured-document-text/src/pdf/index.js';
-import { contentsLocatorMatchesPageLabel } from '../contents.js';
+import { compactText as getContentsTextKey, contentsLocatorMatchesPageLabel, inferContentsPageLabels } from '../contents.js';
 import { titles as REFERENCE_TITLES } from '../reference/titles.js';
 import { getClosestDistance, resolveDestination } from '../util.js';
 
@@ -51,15 +52,6 @@ function getOutlineNumberParts(text) {
 	if (!match) return [];
 
 	const parts = match[1].split(/[.-]/);
-	if (parts.length === 1) {
-		const part = parts[0];
-		const isDigits = /^\d+$/.test(part);
-		const isSingleLetter = /^[A-Za-z]$/.test(part);
-		const isRomanNumeral = ROMAN_NUMERAL_RE.test(part) && part.length <= 4;
-		if (!isDigits && !isSingleLetter && !isRomanNumeral) {
-			return [];
-		}
-	}
 
 	for (const part of parts) {
 		const isDigits = /^\d+$/.test(part);
@@ -84,27 +76,6 @@ function getUppercaseRatio(text) {
 	return Number((uppercaseCount / text.length).toFixed(2));
 }
 
-function isNumericChild(parentParts, childParts) {
-	if (!Array.isArray(parentParts) || !Array.isArray(childParts)) return false;
-	if (parentParts.length === 0) return false;
-
-	if (childParts.length === parentParts.length + 1) {
-		for (let i = 0; i < parentParts.length; i++) {
-			if (parentParts[i] !== childParts[i]) return false;
-		}
-		return true;
-	}
-
-	if (childParts.length === parentParts.length) {
-		for (let i = 0; i < parentParts.length - 1; i++) {
-			if (parentParts[i] !== childParts[i]) return false;
-		}
-		return true;
-	}
-
-	return false;
-}
-
 function normalizeFontName(name) {
 	if (!name || typeof name !== 'string') return '';
 	const plusIndex = name.indexOf('+');
@@ -114,27 +85,8 @@ function normalizeFontName(name) {
 	return name.trim();
 }
 
-function fontWeightScore(name) {
-	if (!name) return 0;
-	const lowered = name.toLowerCase();
-	if (lowered.includes('black')) return 4;
-	if (lowered.includes('heavy')) return 3.5;
-	if (lowered.includes('bold')) return 3;
-	if (lowered.includes('semibold') || lowered.includes('demi')) return 2.5;
-	if (lowered.includes('medium')) return 2;
-	if (lowered.includes('regular')) return 1;
-	return 0;
-}
-
 function clamp(value, min, max) {
 	return Math.min(Math.max(value, min), max);
-}
-
-function getMedian(values) {
-	if (!values.length) return 0;
-	const sorted = values.slice().sort((a, b) => a - b);
-	const mid = Math.floor(sorted.length / 2);
-	return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function computeItemStyle(item) {
@@ -143,8 +95,6 @@ function computeItemStyle(item) {
 	const fontName = normalizeFontName(item._fontName || '');
 	const upper = getUppercaseRatio(item.title) >= 0.9;
 	item._styleKey = `${fontName}|${sizeBucket}|${upper}`;
-	item._sizeBucket = sizeBucket;
-	item._upper = upper;
 	item._numericParts = getOutlineNumberParts(item.title);
 	return item;
 }
@@ -158,11 +108,11 @@ function normalizeLooseTitle(title) {
 		.toLowerCase();
 }
 
-function buildAllBlocksByPage(blocks) {
+function buildAllBlocksByPage(blocks, includeExcluded = false) {
 	const allBlocksByPage = new Map();
 	for (let i = 0; i < blocks.length; i++) {
 		const block = blocks[i];
-		if (block.flowClass === 'excluded') continue;
+		if (!includeExcluded && block.flowClass === 'excluded') continue;
 		const metrics = block._metrics || {};
 		const anchorRect = block?.anchor?.pageRects?.[0];
 		const rect = metrics.rect || (anchorRect ? anchorRect.slice(1) : null);
@@ -218,41 +168,6 @@ function extractHeadingItems(blocks) {
 	return headingItems;
 }
 
-function normalizeText(text) {
-	if (!text || typeof text !== 'string') return '';
-	return text.toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
-function textMatches(nativeTitle, blockText) {
-	const normNative = normalizeText(nativeTitle);
-	const normBlock = normalizeText(blockText);
-	if (!normNative || !normBlock) return false;
-	return normBlock.startsWith(normNative) || normNative.startsWith(normBlock);
-}
-
-function truncateToNativeTitle(blockTitle, nativeTitle) {
-	if (!blockTitle || !nativeTitle) return blockTitle || '';
-	const nativeLen = nativeTitle.length;
-	if (nativeLen <= 0 || blockTitle.length <= nativeLen) return blockTitle;
-
-	const searchStart = Math.max(0, nativeLen - 3);
-	const searchEnd = Math.min(blockTitle.length - 1, nativeLen + 3);
-	let cutPoint = nativeLen;
-	let bestDistance = Number.POSITIVE_INFINITY;
-
-	for (let i = searchStart; i <= searchEnd; i++) {
-		if (/\s/.test(blockTitle[i])) {
-			const distance = Math.abs(i - nativeLen);
-			if (distance < bestDistance) {
-				bestDistance = distance;
-				cutPoint = i;
-			}
-		}
-	}
-
-	return blockTitle.slice(0, cutPoint).trim();
-}
-
 export async function getNativeOutline(pdfDocument) {
 	if (!pdfDocument) return [];
 	let items;
@@ -275,8 +190,6 @@ export async function getNativeOutline(pdfDocument) {
 				const position = await resolveDestination(pdfDocument, item.dest);
 				if (position) {
 					newItem.location = { position };
-				} else {
-					newItem.brokenDest = true;
 				}
 			} else if (item.unsafeUrl) {
 				newItem.url = item.unsafeUrl;
@@ -289,16 +202,11 @@ export async function getNativeOutline(pdfDocument) {
 		return result;
 	}
 
-	let outline = await transformItems(items);
-	if (outline.length === 1 && outline[0].items.length > 1) {
-		outline = outline[0].items;
-	}
-	return outline;
+	return transformItems(items);
 }
 
-export function flattenNativeOutline(items, depth = 0, parent = null, out = [], orderRef = { value: 0 }) {
+export function flattenNativeOutline(items, parent = null, out = []) {
 	for (const item of items || []) {
-		const orderIndex = orderRef.value++;
 		const pageIndex = item?.location?.position?.pageIndex;
 		let rect = item?.location?.position?.rect;
 		if (!rect && Array.isArray(item?.location?.position?.rects) && item.location.position.rects.length) {
@@ -306,13 +214,9 @@ export function flattenNativeOutline(items, depth = 0, parent = null, out = [], 
 		}
 		const node = {
 			title: item.title || '',
-			_depth: depth,
 			_pageIndex: Number.isFinite(pageIndex) ? pageIndex : null,
 			_rect: Array.isArray(rect) ? rect : null,
-			_orderIndex: orderIndex,
-			_location: item.location,
 			_url: item.url,
-			_brokenDest: item.brokenDest === true,
 			_parent: parent,
 			_children: [],
 		};
@@ -321,52 +225,10 @@ export function flattenNativeOutline(items, depth = 0, parent = null, out = [], 
 		}
 		out.push(node);
 		if (item.items && item.items.length) {
-			flattenNativeOutline(item.items, depth + 1, node, out, orderRef);
+			flattenNativeOutline(item.items, node, out);
 		}
 	}
 	return out;
-}
-
-function matchNativeToBlocks(nativeNodes, allBlocksByPage) {
-	const matches = [];
-	const usedBlocks = new Set();
-	for (const native of nativeNodes) {
-		if (!Number.isFinite(native._pageIndex)) continue;
-		const pageBlocks = allBlocksByPage.get(native._pageIndex) || [];
-		for (const block of pageBlocks) {
-			if (usedBlocks.has(block)) continue;
-			if (block.type !== 'heading') continue;
-			if (textMatches(native.title, block.title)) {
-				usedBlocks.add(block);
-				matches.push({ native, block });
-				break;
-			}
-		}
-	}
-	return matches;
-}
-
-function buildNativeMatchedItems(matches) {
-	const items = [];
-	for (const { native, block } of matches) {
-		const title = truncateToNativeTitle(block.title || '', native.title || '');
-		const item = {
-			title,
-			ref: [block._blockIndex],
-			_blockIndex: block._blockIndex,
-			_pageIndex: block._pageIndex,
-			_rect: block._rect,
-			_fontName: block._fontName || '',
-			_fontSize: block._fontSize || 0,
-			_orderIndex: block._blockIndex,
-			_nativeDepth: native._depth,
-			_nativeParent: native._parent,
-			_nativeChildren: native._children,
-		};
-		computeItemStyle(item);
-		items.push(item);
-	}
-	return items;
 }
 
 function recoverInlineHeadings(allBlocksByPage, confirmedStyles, usedBlockIndices) {
@@ -405,7 +267,6 @@ function recoverInlineHeadings(allBlocksByPage, confirmedStyles, usedBlockIndice
 				_fontName: block._firstCharFontName || '',
 				_fontSize: firstCharFontSize,
 				_orderIndex: block._blockIndex,
-				_recovered: true,
 			};
 			computeItemStyle(item);
 			recoveredItems.push(item);
@@ -418,28 +279,6 @@ function recoverInlineHeadings(allBlocksByPage, confirmedStyles, usedBlockIndice
 
 function getComparableTitleKey(title) {
 	return normalizeLooseTitle(title).replace(/\s/gu, '');
-}
-
-function getBlockStyles(block) {
-	const upper = getUppercaseRatio(block.title) >= 0.9;
-	const styles = [];
-	for (const [fontName, fontSize] of [
-		[block._fontName, block._fontSize],
-		[block._firstCharFontName, block._firstCharFontSize],
-	]) {
-		const normalizedFontName = normalizeFontName(fontName || '');
-		const sizeBucket = Math.round((fontSize || 0) * 2) / 2;
-		if (normalizedFontName || sizeBucket) {
-			styles.push({
-				key: `${normalizedFontName}|${sizeBucket}|${upper}`,
-				fontName,
-				fontSize,
-			});
-		}
-	}
-	return styles.filter((style, index) => (
-		styles.findIndex(candidate => candidate.key === style.key) === index
-	));
 }
 
 function getRowDestinations(row) {
@@ -461,252 +300,125 @@ function selectDestinationMatch(candidates, destination) {
 }
 
 function findLinkedTitleMatch(row, candidatesByPage) {
-	const titleKey = row.titleKey || getComparableTitleKey(row.title);
+	const titleKey = row.titleKey || getContentsTextKey(row.title);
 	if (!titleKey) return null;
 	const matches = [];
 	for (const destination of getRowDestinations(row)) {
 		if (!Number.isInteger(destination.pageIndex)) continue;
-		const candidates = (candidatesByPage.get(destination.pageIndex) || [])
-			.filter(candidate => getComparableTitleKey(candidate.title) === titleKey);
+		const pageBlocks = candidatesByPage.get(destination.pageIndex) || [];
+		const candidates = findContentsBlockMatches(row, pageBlocks)
+			.map(match => ({ ...match.block, title: match.title }));
 		const match = selectDestinationMatch(candidates, destination);
-		if (match) matches.push({ match, destination });
+		if (match) matches.push(match);
 	}
-	const unique = matches.filter(({ match }, index) => (
-		matches.findIndex(candidate => candidate.match._blockIndex === match._blockIndex) === index
+	const unique = matches.filter((match, index) => (
+		matches.findIndex(candidate => candidate._blockIndex === match._blockIndex) === index
 	));
-	return unique.length === 1
-		? { ...unique[0].match, _matchedDestination: unique[0].destination }
-		: null;
+	return unique.length === 1 ? unique[0] : null;
 }
 
-function groupItemsByPage(items) {
-	const result = new Map();
-	for (const item of items) {
-		if (!Number.isInteger(item._pageIndex)) continue;
-		if (!result.has(item._pageIndex)) result.set(item._pageIndex, []);
-		result.get(item._pageIndex).push(item);
+function findContentsBlockMatches(row, pageBlocks) {
+	const rowKey = row.titleKey || getContentsTextKey(row.title);
+	if (!rowKey) return [];
+	const keys = [rowKey];
+	// A contents label may be separate from the title at its destination.
+	if (row.locatorKey && getOutlineNumberParts(row.title).length) {
+		const titleKey = getContentsTextKey(row.title.replace(OUTLINE_NUMBER_RE, '').replace(/^[.)\s:-]+/u, ''));
+		if (titleKey) keys.push(titleKey);
 	}
-	return result;
-}
-
-function findContentsBlockMatch(row, pageBlocks) {
-	const rowKey = row.titleKey || getComparableTitleKey(row.title);
-	if (!rowKey) return null;
 	const matches = [];
 	for (let start = 0; start < pageBlocks.length; start++) {
-		if (pageBlocks[start].type !== 'heading') continue;
+		if (pageBlocks[start].type !== 'heading' && pageBlocks[start].type !== 'paragraph') continue;
 		let title = '';
 		for (let end = start; end < pageBlocks.length; end++) {
 			const block = pageBlocks[end];
 			if (block.type !== 'heading' && block.type !== 'paragraph') break;
 			title = title ? `${title} ${block.title}` : block.title;
-			const key = getComparableTitleKey(title);
-			if (key === rowKey) {
-				matches.push({ title, block: pageBlocks[start] });
+			const key = getContentsTextKey(title);
+			if (keys.includes(key)) {
+				matches.push({ title: key === rowKey ? title : row.title, block: pageBlocks[start] });
 				break;
 			}
-			if (!key || !rowKey.startsWith(key)) break;
+			if (!key || !keys.some(candidate => candidate.startsWith(key))) break;
+		}
+	}
+	return matches;
+}
+
+// Once a contents region is independently confirmed, its title and printed
+// page label can identify a body block even when the heading model missed it
+// or the same title occurs in several chapters. Ambiguous matches stay out.
+function findPrintedContentsMatch(row, allBlocksByPage, contentsPage, inferredLabels) {
+	const matches = [];
+	const linkedPages = new Set(getRowDestinations(row).map(destination => destination.pageIndex));
+	if (Number.isInteger(row.targetPage)) {
+		if ((!linkedPages.size || linkedPages.has(row.targetPage))
+			&& inferredLabels[row.targetPage]?.has(row.locatorKey)) {
+			matches.push(...findContentsBlockMatches(row, allBlocksByPage.get(row.targetPage) || []));
+		}
+	} else {
+		const rowKey = getContentsTextKey(row.title);
+		for (const [pageIndex, pageBlocks] of allBlocksByPage) {
+			if (pageIndex <= contentsPage) continue;
+			// A printed locator can corroborate an authored link, but must not redirect it.
+			if (linkedPages.size && !linkedPages.has(pageIndex)) continue;
+			for (const labelKey of inferredLabels[pageIndex] || []) {
+				if (!labelKey) continue;
+				if (row.locatorKey ? row.locatorKey !== labelKey : !rowKey.endsWith(labelKey)) continue;
+				const titleKey = row.locatorKey ? rowKey : rowKey.slice(0, -labelKey.length);
+				if (!titleKey) continue;
+				matches.push(...findContentsBlockMatches({ ...row, titleKey }, pageBlocks));
+			}
 		}
 	}
 	return matches.length === 1 ? matches[0] : null;
 }
 
-function buildPrintedContentsOutline(allBlocksByPage, navigationRegions, pageLabels) {
+function getLinkedContentsTitle(row, destination, pageLabels) {
+	// Dot leaders separate a locator from the authored title. Only strip a
+	// suffix when it agrees with the linked page's label.
+	const match = /^(.*?)\s*(?:\.{2,}|…)\s*(\S+)\s*$/u.exec(row.title);
+	return match && contentsLocatorMatchesPageLabel(
+		getContentsTextKey(match[2]), pageLabels?.[destination.pageIndex],
+	) ? match[1].trim() : row.title;
+}
+
+function buildPrintedContentsOutline(allBlocksByPage, navigationRegions, pageLabels, linkedBlocksByPage) {
 	const items = [];
 	const usedBlockIndices = new Set();
+	const inferredLabels = inferContentsPageLabels(navigationRegions, pageLabels || []);
 	for (const region of navigationRegions) {
 		if (region.source !== 'heading-concentration') continue;
 		for (const row of region.rows || []) {
-			if (
-				!Number.isInteger(row.targetPage)
-				|| !contentsLocatorMatchesPageLabel(row.locatorKey, pageLabels?.[row.targetPage])
-			) {
-				continue;
+			const linkedBlock = findLinkedTitleMatch(row, linkedBlocksByPage);
+			const match = linkedBlock
+				? { title: linkedBlock.title, block: linkedBlock }
+				: findPrintedContentsMatch(row, allBlocksByPage, region.pageIndex, inferredLabels);
+			const destinations = getRowDestinations(row);
+			const destination = destinations.length === 1 ? destinations[0] : null;
+			if (!match && !destination) continue;
+			if (!match && destination) {
+				const titleKey = getContentsTextKey(getLinkedContentsTitle(row, destination, pageLabels));
+				if ((linkedBlocksByPage.get(destination.pageIndex) || []).some(block =>
+					block.type === 'caption' && getContentsTextKey(block.title) === titleKey)) continue;
 			}
-			const match = findContentsBlockMatch(
-				row,
-				allBlocksByPage.get(row.targetPage) || [],
-			);
-			if (!match || usedBlockIndices.has(match.block._blockIndex)) continue;
-			usedBlockIndices.add(match.block._blockIndex);
-			items.push({
-				title: match.title,
-				ref: [match.block._blockIndex],
-			});
+			if (match && usedBlockIndices.has(match.block._blockIndex)) continue;
+			const item = match
+				? { title: match.title, ref: [match.block._blockIndex] }
+				: { title: getLinkedContentsTitle(row, destination, pageLabels), target: { position: destination } };
+			if (match) usedBlockIndices.add(match.block._blockIndex);
+			items.push(item);
 		}
 	}
-	return items.sort((a, b) => a.ref[0] - b.ref[0]);
+	return items;
 }
 
-function markAlignedContentsHeadings(headingItems, navigationRegions) {
-	const alignedBlockIndices = new Set();
-	if (!navigationRegions?.length) return alignedBlockIndices;
-	const navigationPages = new Set(navigationRegions.map(region => region.pageIndex));
-	const headingsByTitle = new Map();
-	for (const item of headingItems) {
-		if (navigationPages.has(item._pageIndex)) continue;
-		const key = getComparableTitleKey(item.title);
-		if (!key) continue;
-		if (!headingsByTitle.has(key)) headingsByTitle.set(key, []);
-		headingsByTitle.get(key).push(item);
-	}
-
-	for (const region of navigationRegions) {
-		const matches = [];
-		const usedBlockIndices = new Set();
-		for (const row of region.rows || []) {
-			const candidates = (headingsByTitle.get(row.titleKey || getComparableTitleKey(row.title)) || [])
-				.filter(item => item._pageIndex > region.pageIndex);
-			if (candidates.length !== 1 || usedBlockIndices.has(candidates[0]._blockIndex)) continue;
-			matches.push(candidates[0]);
-			usedBlockIndices.add(candidates[0]._blockIndex);
-		}
-		if (
-			matches.length
-			&& matches.every((item, index) => (
-				index === 0 || matches[index - 1]._blockIndex < item._blockIndex
-			))
-		) {
-			for (const item of matches) {
-				item._contentsAnchor = true;
-				alignedBlockIndices.add(item._blockIndex);
-			}
-		}
-	}
-	return alignedBlockIndices;
-}
-
-// Two independently recognized linked headings establish that a navigation
-// region follows the body outline. Only exact linked block matches that
-// preserve that sequence and reuse an anchored heading style are recovered.
-function recoverContentsHeadings(
-	allBlocksByPage,
-	headingItems,
-	usedBlockIndices,
-	navigationRegions,
-) {
-	if (!navigationRegions?.length) return [];
-	const navigationPages = new Set(navigationRegions.map(region => region.pageIndex));
-	const headingsByPage = groupItemsByPage(headingItems.filter(item => (
-		!navigationPages.has(item._pageIndex)
-	)));
-	const candidatesByPage = new Map();
-	for (const pageBlocks of allBlocksByPage.values()) {
-		for (const block of pageBlocks) {
-			if (
-				(block.type !== 'paragraph' && block.type !== 'heading')
-				|| usedBlockIndices.has(block._blockIndex)
-				|| block._contentsNavigationHeading
-				|| navigationPages.has(block._pageIndex)
-			) {
-				continue;
-			}
-			if (!candidatesByPage.has(block._pageIndex)) candidatesByPage.set(block._pageIndex, []);
-			candidatesByPage.get(block._pageIndex).push(block);
-		}
-	}
-
-	const recoveredItems = [];
-	for (const region of navigationRegions) {
-		const rows = (region.rows || []).map((row, rowIndex) => ({
-			row,
-			rowIndex,
-			anchor: findLinkedTitleMatch(row, headingsByPage),
-		}));
-		const anchors = rows.filter(item => item.anchor);
-		const orderedAnchors = region.source === 'destination-link'
-			&& anchors.length >= 2 && anchors.every((item, index) => (
-			index === 0 || anchors[index - 1].anchor._blockIndex < item.anchor._blockIndex
-		));
-		const anchorStyles = new Set(anchors.map(item => item.anchor._styleKey).filter(Boolean));
-		if (orderedAnchors) for (const rowMatch of rows) {
-			if (rowMatch.anchor) continue;
-			const candidate = findLinkedTitleMatch(rowMatch.row, candidatesByPage);
-			if (!candidate || usedBlockIndices.has(candidate._blockIndex)) continue;
-			const destinationRect = candidate._matchedDestination?.rect;
-			if (destinationRect && candidate._rect) {
-				const candidateDistance = getClosestDistance(candidate._rect, destinationRect);
-				const closerHeading = (headingsByPage.get(candidate._pageIndex) || []).some(heading => (
-					heading._rect
-					&& getClosestDistance(heading._rect, destinationRect) <= candidateDistance
-				));
-				if (closerHeading) continue;
-			}
-			const matchingStyle = getBlockStyles(candidate)
-				.find(style => anchorStyles.has(style.key));
-			if (!matchingStyle) continue;
-			const preservesOrder = anchors.every(anchor => (
-				anchor.rowIndex < rowMatch.rowIndex
-					? anchor.anchor._blockIndex < candidate._blockIndex
-					: anchor.anchor._blockIndex > candidate._blockIndex
-			));
-			if (!preservesOrder) continue;
-			const outlineItem = {
-				title: candidate.title,
-				ref: [candidate._blockIndex],
-				_blockIndex: candidate._blockIndex,
-				_pageIndex: candidate._pageIndex,
-				_rect: candidate._rect,
-				_fontName: matchingStyle.fontName || '',
-				_fontSize: matchingStyle.fontSize || 0,
-				_orderIndex: candidate._blockIndex,
-				_recovered: true,
-			};
-			computeItemStyle(outlineItem);
-			recoveredItems.push(outlineItem);
-			usedBlockIndices.add(candidate._blockIndex);
-		}
-	}
-	return recoveredItems;
-}
-
-function computeStyleStats(items) {
-	const stats = new Map();
-	const sizes = [];
+function countHeadingStyles(items) {
+	const counts = new Map();
 	for (const item of items) {
-		if (!item || !item._styleKey) continue;
-		const fontSize = Number.isFinite(item._fontSize) ? item._fontSize : 0;
-		sizes.push(fontSize);
-		let stat = stats.get(item._styleKey);
-		if (!stat) {
-			const fontName = normalizeFontName(item._fontName || '');
-			stat = {
-				key: item._styleKey,
-				fontSize: item._sizeBucket,
-				fontName,
-				upper: item._upper,
-				count: 0,
-				weight: fontWeightScore(fontName),
-				rare: false,
-				frequent: false,
-				smallFont: false,
-				sizeGap: 0,
-			};
-			stats.set(item._styleKey, stat);
-		}
-		stat.count += 1;
+		if (item?._styleKey) counts.set(item._styleKey, (counts.get(item._styleKey) || 0) + 1);
 	}
-
-	const total = items.length || 1;
-	const median = getMedian(sizes);
-	const styles = Array.from(stats.values());
-	styles.sort((a, b) => {
-		if (b.fontSize !== a.fontSize) return b.fontSize - a.fontSize;
-		if (a.upper !== b.upper) return a.upper ? -1 : 1;
-		if (b.weight !== a.weight) return b.weight - a.weight;
-		return a.count - b.count;
-	});
-
-	for (let i = 0; i < styles.length; i++) {
-		const style = styles[i];
-		style.rare = style.count <= 1 || style.count / total < 0.02;
-		style.frequent = style.count / total > 0.35;
-		style.smallFont = median > 0 && style.fontSize < median * 0.7;
-		const next = styles[i + 1];
-		style.sizeGap = next ? Math.abs(style.fontSize - next.fontSize) : style.fontSize;
-	}
-
-	return stats;
+	return counts;
 }
 
 function getTitleRefIndexes(titleRefs) {
@@ -769,49 +481,13 @@ function markKeywordTitleTerminals(items) {
 	}
 }
 
-function getNodeOrderKey(node) {
-	const orderIndex = Number.isFinite(node._orderIndex) ? node._orderIndex : Number.POSITIVE_INFINITY;
-	return [orderIndex];
-}
-
-function compareOrderKey(a, b) {
-	for (let i = 0; i < a.length; i++) {
-		if (a[i] < b[i]) return -1;
-		if (a[i] > b[i]) return 1;
-	}
-	return 0;
-}
-
-function buildStyleDepthMap(nativeMatchedItems, combinedItems) {
-	const nativeMap = new Map();
-	const nativeAmbiguous = new Set();
-	for (const item of nativeMatchedItems) {
-		if (!item._styleKey) continue;
-		const depth = Number.isFinite(item._nativeDepth) ? item._nativeDepth + 1 : null;
-		if (!Number.isFinite(depth) || depth < 1) continue;
-		if (nativeAmbiguous.has(item._styleKey)) continue;
-
-		const existing = nativeMap.get(item._styleKey);
-		if (existing == null) {
-			nativeMap.set(item._styleKey, depth);
-		} else if (existing !== depth) {
-			nativeMap.delete(item._styleKey);
-			nativeAmbiguous.add(item._styleKey);
-		}
-	}
-
+function buildStyleDepthMap(items) {
 	const numericMap = new Map();
 	const numericAmbiguous = new Set();
-	let prevNumericParts = null;
-	for (const item of combinedItems) {
+	for (const item of items) {
 		if (!item._numericParts || !item._numericParts.length) {
-			prevNumericParts = null;
 			continue;
 		}
-		if (prevNumericParts && !isNumericChild(prevNumericParts, item._numericParts)) {
-			// Sequence break; each heading still maps independently.
-		}
-		prevNumericParts = item._numericParts;
 
 		const styleKey = item._styleKey;
 		if (!styleKey) continue;
@@ -827,24 +503,7 @@ function buildStyleDepthMap(nativeMatchedItems, combinedItems) {
 		}
 	}
 
-	const styleDepthMap = new Map();
-	for (const [styleKey, depth] of numericMap) {
-		styleDepthMap.set(styleKey, { depth, source: 'numeric' });
-	}
-	for (const [styleKey, depth] of nativeMap) {
-		if (styleDepthMap.has(styleKey)) continue;
-		if (numericAmbiguous.has(styleKey)) continue;
-		styleDepthMap.set(styleKey, { depth, source: 'native' });
-	}
-
-	return styleDepthMap;
-}
-
-function styleInStack(stack, styleKey) {
-	for (let i = 1; i < stack.length; i++) {
-		if (stack[i]._styleKey === styleKey) return true;
-	}
-	return false;
+	return numericMap;
 }
 
 function findShallowestStyleDepth(stack, styleKey) {
@@ -860,24 +519,26 @@ function buildOutline(items, styleDepthMap, maxDepth) {
 	let prevItem = null;
 
 	for (const item of items) {
+		const existingStyleDepth = item._styleKey ? findShallowestStyleDepth(stack, item._styleKey) : null;
 		let depth;
 
 		if (item._forceTop) {
 			depth = 1;
 		} else if (item._numericParts && item._numericParts.length) {
 			depth = item._numericParts.length;
-		} else if (item._styleKey && styleDepthMap.has(item._styleKey) && !styleInStack(stack, item._styleKey)) {
-			depth = styleDepthMap.get(item._styleKey).depth;
+		} else if (item._styleKey && styleDepthMap.has(item._styleKey) && existingStyleDepth === null) {
+			depth = styleDepthMap.get(item._styleKey);
 		} else if (prevItem && item._styleKey && prevItem._styleKey && item._styleKey === prevItem._styleKey) {
 			depth = prevItem._level || 1;
-		} else if (item._styleKey && styleInStack(stack, item._styleKey)) {
-			depth = findShallowestStyleDepth(stack, item._styleKey);
+		} else if (existingStyleDepth !== null) {
+			depth = existingStyleDepth;
 		} else {
 			depth = stack.length;
 		}
 
 		if (!Number.isFinite(depth) || depth < 1) depth = 1;
-		depth = clamp(depth, 1, maxDepth);
+		// Explicit section paths can express more levels than the document has fonts.
+		if (!item._numericParts?.length) depth = clamp(depth, 1, maxDepth);
 
 		while (stack.length > depth) {
 			stack.pop();
@@ -907,7 +568,7 @@ function unwrapUniqueStyleParents(items, styleCounts) {
 
 		const styleKey = item._styleKey;
 		const isUnique = styleKey && styleCounts.get(styleKey) === 1;
-		if (children.length && isUnique && !item._forceTop && !item._contentsAnchor) {
+		if (children.length && isUnique && !item._forceTop) {
 			result.push(...children);
 		} else {
 			result.push(item);
@@ -1041,64 +702,10 @@ function repairNumericHierarchy(items) {
 	return items;
 }
 
-function conflictsWithNumericHierarchy(parent, child) {
-	const parentParts = parent?._numericParts || [];
-	const childParts = child?._numericParts || [];
-	return parentParts.length > 0
-		&& childParts.length > 0
-		&& !numericPartsStartWith(childParts, parentParts);
-}
-
-function buildNativeItemMap(nativeMatches, items) {
-	const itemByBlockIndex = new Map();
-	for (const item of collectOutlineItems(items)) {
-		if (Array.isArray(item.ref) && Number.isInteger(item.ref[0])) {
-			itemByBlockIndex.set(item.ref[0], item);
-		}
-	}
-
-	const nativeItemMap = new Map();
-	for (const { native, block } of nativeMatches) {
-		const item = itemByBlockIndex.get(block._blockIndex);
-		if (item) {
-			nativeItemMap.set(native, item);
-		}
-	}
-	return nativeItemMap;
-}
-
 function isTerminalTitleItem(item) {
 	return !!item?._forceTopTerminal
 		|| isReferenceTerminalTitle(item?.title)
 		|| isAcknowledgmentTopTitle(item?.title);
-}
-
-function repairNativeParentHierarchy(items, nativeMatches) {
-	if (!Array.isArray(items) || !items.length || !nativeMatches.length) {
-		return items;
-	}
-
-	flattenOutlineNodes(items);
-	const nativeItemMap = buildNativeItemMap(nativeMatches, items);
-	for (const { native } of nativeMatches) {
-		const item = nativeItemMap.get(native);
-		const parent = nativeItemMap.get(native?._parent);
-		if (!item || !parent || item._parentItem === parent || isAncestorOf(item, parent)) {
-			continue;
-		}
-		if (getOutlineOrderIndex(parent) > getOutlineOrderIndex(item)) {
-			continue;
-		}
-		if (isTerminalTitleItem(item)
-			|| isTerminalTitleItem(parent)
-			|| conflictsWithNumericHierarchy(parent, item)) {
-			continue;
-		}
-		removeFromCurrentParent(items, item);
-		insertByOrder(parent, item);
-	}
-	clearParentLinks(items);
-	return items;
 }
 
 function getSinglePartExplicitMarker(item) {
@@ -1236,143 +843,38 @@ function liftTerminalChildren(items) {
 	return result;
 }
 
-function normalizeLevels(items, depth = 1) {
-	for (const item of items) {
-		item._level = depth;
-		if (Array.isArray(item.children) && item.children.length) {
-			normalizeLevels(item.children, depth + 1);
-		}
-	}
-}
-
 function filterOutlineItem(item) {
 	if (!item || typeof item !== 'object') return null;
 	const refArray = Array.isArray(item.ref) ? item.ref : [];
 	const children = Array.isArray(item.children)
 		? item.children.map(filterOutlineItem).filter(Boolean)
 		: [];
-	const url = item._url || null;
-
-	if (refArray.length === 0 && !url && children.length === 0) {
+	if (refArray.length === 0 && children.length === 0) {
 		return null;
 	}
 
 	const result = { title: item.title };
 	if (refArray.length > 0) result.ref = refArray;
-	if (url) result.target = { url };
 	if (children.length > 0) result.children = children;
 	return result;
 }
 
-function buildGeneratedOutline(items, titleRef, nativeMatchedItems, nativeMatches) {
+function buildGeneratedOutline(items, titleRef) {
 	const combined = items.map(item => ({ ...item, children: [] }));
-	for (const item of combined) {
-		item._orderKey = getNodeOrderKey(item);
-	}
-	combined.sort((a, b) => compareOrderKey(a._orderKey, b._orderKey));
+	combined.sort((a, b) => getOutlineOrderIndex(a) - getOutlineOrderIndex(b));
 
-	const styleStats = computeStyleStats(combined);
+	const styleCounts = countHeadingStyles(combined);
 	markForceTop(combined, titleRef);
-	const styleDepthMap = buildStyleDepthMap(nativeMatchedItems, combined);
-	const numDistinctStyles = styleStats.size || 1;
+	const styleDepthMap = buildStyleDepthMap(combined);
+	const numDistinctStyles = styleCounts.size || 1;
 	const maxDepth = Math.min(6, Math.max(1, numDistinctStyles));
 	const outline = buildOutline(combined, styleDepthMap, maxDepth);
-	const styleCounts = new Map();
-	for (const [key, stat] of styleStats) {
-		styleCounts.set(key, stat.count);
-	}
 	const unwrapped = unwrapUniqueStyleParents(outline, styleCounts);
 	markKeywordTitleTerminals(unwrapped);
-	repairNativeParentHierarchy(unwrapped, nativeMatches);
 	repairNumericHierarchy(unwrapped);
 	const markerRepaired = repairMixedMarkerHierarchy(unwrapped);
 	const terminalLifted = liftTerminalChildren(markerRepaired);
-	normalizeLevels(terminalLifted, 1);
 	return terminalLifted.map(filterOutlineItem).filter(Boolean);
-}
-
-function getRefKey(item) {
-	return Array.isArray(item?.ref) ? item.ref.join('.') : null;
-}
-
-function cloneOutlineItems(items, index) {
-	return (items || []).map(item => {
-		const children = cloneOutlineItems(item.children, index);
-		const clone = {
-			title: item.title,
-			...(Array.isArray(item.ref) && { ref: item.ref.slice() }),
-			...(item.target && { target: { ...item.target } }),
-			...(item.source && { source: item.source }),
-			...(children.length && { children }),
-		};
-		if (Number.isFinite(item._flowIndex)) {
-			clone._flowIndex = item._flowIndex;
-		}
-		const key = getRefKey(clone);
-		if (key) index.set(key, clone);
-		return clone;
-	});
-}
-
-// Order key of an outline item in top-level block space. Items without any
-// position (dest-less containers, URL entries) return null and inherit the
-// preceding sibling's key, so insertions can never split them from it.
-function getOutlineInsertKey(item) {
-	if (Array.isArray(item.ref) && Number.isInteger(item.ref[0])) {
-		return item.ref[0];
-	}
-	if (Number.isFinite(item._flowIndex)) {
-		return item._flowIndex;
-	}
-	return null;
-}
-
-function insertOutlineItem(items, item) {
-	const blockIndex = item.ref?.[0] ?? Number.POSITIVE_INFINITY;
-	let insertIndex = items.length;
-	let lastKey = Number.NEGATIVE_INFINITY;
-	for (let i = 0; i < items.length; i++) {
-		const key = getOutlineInsertKey(items[i]);
-		if (key !== null) {
-			lastKey = key;
-		}
-		if (lastKey > blockIndex) {
-			insertIndex = i;
-			break;
-		}
-	}
-	items.splice(insertIndex, 0, item);
-}
-
-function mergeOutlineAdditions(baseline, enriched, allowedBlockIndices) {
-	const index = new Map();
-	const result = cloneOutlineItems(baseline, index);
-	function visit(items, ancestors = []) {
-		for (const item of items || []) {
-			const key = getRefKey(item);
-			let target = key ? index.get(key) : null;
-			if (key && !target && allowedBlockIndices.has(item.ref?.[0])) {
-				target = {
-					title: item.title,
-					ref: item.ref.slice(),
-					...(item.target && { target: { ...item.target } }),
-				};
-				const parent = ancestors
-					.slice()
-					.reverse()
-					.map(ancestor => index.get(ancestor))
-					.find(Boolean);
-				const siblings = parent
-					? (parent.children ||= [])
-					: result;
-				insertOutlineItem(siblings, target);
-				index.set(key, target);
-			}
-			visit(item.children, key ? [...ancestors, key] : ancestors);
-		}
-	}
-	visit(enriched);
-	return result;
 }
 
 // Types that a page can place out of reading order (floats), so they must not
@@ -1406,20 +908,7 @@ function titleKeySimilarity(keyA, keyB) {
 	if (keyA === keyB) return 1;
 	const maxLength = Math.max(keyA.length, keyB.length);
 	if (maxLength > 200) return 0;
-	let previous = new Array(keyB.length + 1);
-	for (let j = 0; j <= keyB.length; j++) previous[j] = j;
-	for (let i = 1; i <= keyA.length; i++) {
-		const current = [i];
-		for (let j = 1; j <= keyB.length; j++) {
-			current[j] = Math.min(
-				previous[j] + 1,
-				current[j - 1] + 1,
-				previous[j - 1] + (keyA[i - 1] === keyB[j - 1] ? 0 : 1),
-			);
-		}
-		previous = current;
-	}
-	return 1 - previous[keyB.length] / maxLength;
+	return 1 - distance(keyA, keyB) / maxLength;
 }
 
 function buildFlowData(allBlocksByPage, blockCount) {
@@ -1480,27 +969,10 @@ function computeFlowPosition(pageIndex, pointRect, flowData) {
 	};
 }
 
-// An authored outline is used as the skeleton only when it provides real,
-// working structure. All criteria are structural, so they hold for any
-// language and script.
-function isUsableNativeOutline(nativeNodes, pageCount) {
-	const positionedPages = [];
-	let brokenCount = 0;
-	for (const node of nativeNodes) {
-		if (!node.title) continue;
-		if (Number.isFinite(node._pageIndex)) {
-			positionedPages.push(node._pageIndex);
-		} else if (node._brokenDest) {
-			brokenCount++;
-		}
-	}
-	if (positionedPages.length < 2) return false;
-	if (positionedPages.length / (positionedPages.length + brokenCount) < 0.5) return false;
-	if (pageCount >= 10) {
-		const span = Math.max(...positionedPages) - Math.min(...positionedPages) + 1;
-		if (span / pageCount < 0.1) return false;
-	}
-	return true;
+// A working authored destination remains useful even when the outline is
+// short, covers only part of the document, or has broken entries elsewhere.
+function isUsableNativeOutline(nativeNodes) {
+	return nativeNodes.some(node => node.title && Number.isInteger(node._pageIndex) && node._pageIndex >= 0);
 }
 
 // In-flow blocks from a native entry's flow position to the end of the next
@@ -1622,11 +1094,10 @@ function snapNativeNodes(nativeNodes, flowData) {
 			usedBlockIndexes.add(snapped._blockIndex);
 		}
 	}
-	return usedBlockIndexes;
 }
 
 // Project the native tree verbatim: titles, order and nesting are preserved,
-// anchored entries get a ref, the rest keep their destination or URL.
+// block references supplement the authored destination or URL.
 function projectNativeSkeleton(nodes) {
 	const items = [];
 	for (const node of nodes) {
@@ -1638,7 +1109,8 @@ function projectNativeSkeleton(nodes) {
 		const item = { title: node.title || '', source: 'native' };
 		if (node._snapBlock) {
 			item.ref = [node._snapBlock._blockIndex];
-		} else if (Number.isFinite(node._pageIndex)) {
+		}
+		if (Number.isFinite(node._pageIndex)) {
 			const position = { pageIndex: node._pageIndex };
 			if (Array.isArray(node._rect)) {
 				position.rect = node._rect;
@@ -1647,231 +1119,60 @@ function projectNativeSkeleton(nodes) {
 		} else if (node._url) {
 			item.target = { url: node._url };
 		}
-		if (Number.isFinite(node._flowIndex)) {
-			item._flowIndex = node._flowIndex;
-		}
 		if (children.length) {
 			item.children = children;
 		}
-		items.push(item);
+		if (item.ref || item.target || children.length) items.push(item);
 	}
 	return items;
 }
 
-function stripOutlineWorkingProps(items) {
-	for (const item of items || []) {
-		delete item._flowIndex;
-		stripOutlineWorkingProps(item.children);
-	}
-	return items;
-}
-
-function getBlockStyleKey(block) {
-	return computeItemStyle({
-		title: block.title,
-		_fontName: block._fontName,
-		_fontSize: block._fontSize,
-	})._styleKey;
-}
-
-// Enrichment entries live in the gap between the native entries around them:
-// an inserted entry must not leap over a native entry to reach its parent
-// (e.g. a "2.1 ..." heading adopted by an unrelated "2. ..." entry from an
-// earlier chapter). The exception is a top-level insert styled like the
-// author's own top-level headings, such as an appendix missing from the
-// authored outline.
-function enforceGapLineage(items, enrichStyleKeys, rootNativeStyleKeys) {
-	const nodes = flattenOutlineNodes(items);
-	const nativeKeyed = [];
-	for (const node of nodes) {
-		if (node.source !== 'native') continue;
-		const key = getOutlineInsertKey(node);
-		if (key !== null) {
-			nativeKeyed.push({ node, key });
-		}
-	}
-	nativeKeyed.sort((a, b) => a.key - b.key);
-	const additions = nodes
-		.filter(node => !node.source && Array.isArray(node.ref))
-		.sort((a, b) => a.ref[0] - b.ref[0]);
-	for (const item of additions) {
-		const blockIndex = item.ref[0];
-		let gapOwner = null;
-		let gapOwnerKey = null;
-		for (const entry of nativeKeyed) {
-			if (entry.key > blockIndex) break;
-			gapOwner = entry.node;
-			gapOwnerKey = entry.key;
-		}
-		if (!gapOwner || gapOwner === item._parentItem || isAncestorOf(item, gapOwner)) {
-			continue;
-		}
-		const parent = item._parentItem || null;
-		const parentKey = parent ? getOutlineInsertKey(parent) : Number.NEGATIVE_INFINITY;
-		if (parentKey !== null && parentKey >= gapOwnerKey) {
-			continue;
-		}
-		if (!parent && rootNativeStyleKeys.has(enrichStyleKeys.get(blockIndex))) {
-			continue;
-		}
-		removeFromCurrentParent(items, item);
-		gapOwner.children = Array.isArray(gapOwner.children) ? gapOwner.children : [];
-		insertOutlineItem(gapOwner.children, item);
-		item._parentItem = gapOwner;
-	}
-	clearParentLinks(items);
-	return items;
-}
-
-// Authored entries that point to a URL stay functional even when the native
-// tree is not used as the skeleton: they make no position claim, so they are
-// appended after the detected outline in declared order.
+// Preserve the authored grouping of URL entries when positional bookmarks
+// cannot supply a usable skeleton.
 function appendNativeUrlItems(outline, nativeNodes) {
-	const urlItems = [];
-	for (const node of nativeNodes) {
-		if (!node._url || !node.title) continue;
-		urlItems.push({
-			title: node.title,
-			target: { url: node._url },
-			source: 'native',
-		});
-	}
-	return urlItems.length ? [...outline, ...urlItems] : outline;
-}
-
-function buildNativeFirstOutline(nativeNodes, blocks, allBlocksByPage, headingItems, titleRef) {
-	const flowData = buildFlowData(allBlocksByPage, blocks.length);
-	const snappedBlockIndexes = snapNativeNodes(nativeNodes, flowData);
-	const baseline = projectNativeSkeleton(nativeNodes.filter(node => !node._parent));
-
-	// A hierarchical authored outline speaks for itself: the author already
-	// chose its granularity, so detection has nothing to add below it. Only
-	// a flat authored outline (a bare chapter or section list) is enriched.
-	if (nativeNodes.some(node => node._parent)) {
-		return stripOutlineWorkingProps(baseline);
-	}
-
-	const enrichItems = headingItems.filter(item => !snappedBlockIndexes.has(item._blockIndex));
-	const usedBlockIndices = new Set([
-		...headingItems.map(item => item._blockIndex),
-		...snappedBlockIndexes,
-	]);
-	const confirmedStyles = new Set(headingItems.map(item => item._styleKey).filter(Boolean));
-	enrichItems.push(...recoverInlineHeadings(allBlocksByPage, confirmedStyles, usedBlockIndices));
-	if (!enrichItems.length) {
-		return stripOutlineWorkingProps(baseline);
-	}
-
-	const rootNativeStyleKeys = new Set();
-	for (const node of nativeNodes) {
-		if (node._snapBlock && !node._parent) {
-			rootNativeStyleKeys.add(getBlockStyleKey(node._snapBlock));
+	function project(nodes) {
+		const items = [];
+		for (const node of nodes) {
+			const children = project(node._children || []);
+			if (!node.title) {
+				items.push(...children);
+				continue;
+			}
+			if (!node._url && !children.length) continue;
+			const item = { title: node.title, source: 'native' };
+			if (node._url) item.target = { url: node._url };
+			if (children.length) item.children = children;
+			items.push(item);
 		}
+		return items;
 	}
-
-	const nativeMatches = [];
-	for (const node of nativeNodes) {
-		if (node._snapBlock) {
-			nativeMatches.push({ native: node, block: node._snapBlock });
-		}
-	}
-	const nativeMatchedItems = buildNativeMatchedItems(nativeMatches);
-	const enriched = buildGeneratedOutline(
-		[...enrichItems, ...nativeMatchedItems],
-		titleRef,
-		nativeMatchedItems,
-		nativeMatches,
-	);
-	const merged = mergeOutlineAdditions(
-		baseline,
-		enriched,
-		new Set(enrichItems.map(item => item._blockIndex)),
-	);
-	const enrichStyleKeys = new Map(enrichItems.map(item => [item._blockIndex, item._styleKey]));
-	enforceGapLineage(merged, enrichStyleKeys, rootNativeStyleKeys);
-	return stripOutlineWorkingProps(merged);
+	return [...outline, ...project(nativeNodes.filter(node => !node._parent))];
 }
 
 export async function getOutline(blocks, titleRef, pdfDocument, nativeOutline = null, options = {}) {
-	// Phase 1: Build allBlocksByPage
 	const allBlocksByPage = buildAllBlocksByPage(blocks);
-
-	// Phase 2: Native outline -> match to blocks
 	nativeOutline ||= await getNativeOutline(pdfDocument);
 	const nativeNodes = flattenNativeOutline(nativeOutline);
 
-	// Phase 3: Extract heading items
+	// Preserve the author's chosen entries and hierarchy, including sparse outlines.
+	if (isUsableNativeOutline(nativeNodes)) {
+		snapNativeNodes(nativeNodes, buildFlowData(allBlocksByPage, blocks.length));
+		return projectNativeSkeleton(nativeNodes.filter(node => !node._parent));
+	}
+
 	const headingItems = extractHeadingItems(blocks);
 
-	// A usable authored outline becomes the skeleton verbatim and detection
-	// only fills the gaps between its entries
-	const pageCount = Array.isArray(options.pageLabels) ? options.pageLabels.length : 0;
-	if (isUsableNativeOutline(nativeNodes, pageCount)) {
-		return buildNativeFirstOutline(nativeNodes, blocks, allBlocksByPage, headingItems, titleRef);
-	}
-
-	const nativeMatches = matchNativeToBlocks(nativeNodes, allBlocksByPage);
-	const nativeMatchedItems = buildNativeMatchedItems(nativeMatches);
-
-	if (!headingItems.length) return appendNativeUrlItems([], nativeNodes);
-
-	// Phase 4: Build combined list
-	const combined = headingItems.slice();
-	const usedBlockIndices = new Set(combined.map(item => item._blockIndex));
 	const navigationRegions = options.navigationRegions || [];
-	if (
-		!nativeMatches.length
-		&& navigationRegions.some(region => region.source === 'heading-concentration')
-	) {
-		return appendNativeUrlItems(buildPrintedContentsOutline(
-			allBlocksByPage,
-			navigationRegions,
-			options.pageLabels,
-		), nativeNodes);
-	}
-
-	// Phase 4b: Recover inline headings
-	const confirmedStyles = new Set(combined.map(item => item._styleKey).filter(Boolean));
-	const recoveredItems = recoverInlineHeadings(allBlocksByPage, confirmedStyles, usedBlockIndices);
-	combined.push(...recoveredItems);
-	if (!navigationRegions.length) {
-		return appendNativeUrlItems(
-			buildGeneratedOutline(combined, titleRef, nativeMatchedItems, nativeMatches),
-			nativeNodes,
+	if (navigationRegions.some(region => region.source === 'heading-concentration')) {
+		const printed = buildPrintedContentsOutline(
+			allBlocksByPage, navigationRegions, options.pageLabels, buildAllBlocksByPage(blocks, true),
 		);
-	}
-	const baselineItems = combined.map(item => ({ ...item }));
-	const baselineNativeMatchedItems = nativeMatchedItems.filter(item => (
-		!blocks[item._blockIndex]?._contentsNavigationHeading
-	));
-	const baselineNativeMatches = nativeMatches.filter(match => (
-		!blocks[match.block._blockIndex]?._contentsNavigationHeading
-	));
-	const enrichmentBlockIndices = markAlignedContentsHeadings(
-		headingItems,
-		navigationRegions,
-	);
-	const contentsRecoveryItems = recoverContentsHeadings(
-		allBlocksByPage,
-		headingItems,
-		usedBlockIndices,
-		navigationRegions,
-	);
-	combined.push(...contentsRecoveryItems);
-	for (const item of contentsRecoveryItems) {
-		enrichmentBlockIndices.add(item._blockIndex);
+		if (printed.length) return appendNativeUrlItems(printed, nativeNodes);
+		return appendNativeUrlItems(buildGeneratedOutline(headingItems, titleRef), nativeNodes);
 	}
 
-	const baseline = buildGeneratedOutline(
-		baselineItems,
-		titleRef,
-		baselineNativeMatchedItems,
-		baselineNativeMatches,
-	);
-	if (!enrichmentBlockIndices.size) return appendNativeUrlItems(baseline, nativeNodes);
-	const enriched = buildGeneratedOutline(combined, titleRef, nativeMatchedItems, nativeMatches);
-	return appendNativeUrlItems(
-		mergeOutlineAdditions(baseline, enriched, enrichmentBlockIndices),
-		nativeNodes,
-	);
+	const confirmedStyles = new Set(headingItems.map(item => item._styleKey).filter(Boolean));
+	const usedBlockIndices = new Set(headingItems.map(item => item._blockIndex));
+	const recovered = recoverInlineHeadings(allBlocksByPage, confirmedStyles, usedBlockIndices);
+	return appendNativeUrlItems(buildGeneratedOutline([...headingItems, ...recovered], titleRef), nativeNodes);
 }

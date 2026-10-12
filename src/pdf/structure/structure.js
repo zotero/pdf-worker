@@ -160,7 +160,7 @@ export async function getFullStructure(pdfDocument, onnxRuntimeProvider, modelPr
 	let catalogPageLabels = await pdfDocument.pdfManager.ensureCatalog("pageLabels");
 	let nativeOutline = await getNativeOutline(pdfDocument);
 	let pageContentLengths = new Array(pageCount).fill(0);
-	let inferredHeadings = [];
+	let contentsCandidates = [];
 	let contentsContexts = [];
 	const contentsNavigationRegions = [];
 	const rasterTextPageIndexes = new Set();
@@ -304,7 +304,7 @@ export async function getFullStructure(pdfDocument, onnxRuntimeProvider, modelPr
 		reportPageProgress(onProgress, pagesProcessed, pageCount);
 	}
 
-	function collectInferredHeadings(context) {
+	function collectContentsCandidates(context) {
 		let fragments = [];
 		function flush() {
 			if (!fragments.length) return;
@@ -316,7 +316,13 @@ export async function getFullStructure(pdfDocument, onnxRuntimeProvider, modelPr
 					end++
 				) {
 					title = `${title} ${fragments[end].title}`.trim();
-					inferredHeadings.push({ title, _pageIndex: context.i });
+					const sourceBlocks = fragments.slice(start, end + 1).map(fragment => fragment.block);
+					contentsCandidates.push({
+						title,
+						_pageIndex: context.i,
+						_sourceBlocks: sourceBlocks,
+						_requiresLink: sourceBlocks.some(block => block.type !== 'title'),
+					});
 				}
 			}
 			fragments = [];
@@ -341,7 +347,7 @@ export async function getFullStructure(pdfDocument, onnxRuntimeProvider, modelPr
 			return horizontalOverlap > 0 && verticalGap <= height;
 		}
 		for (const block of context.blocks || []) {
-			if (block.type !== 'title') {
+			if (block.type !== 'title' && block.type !== 'body') {
 				flush();
 				continue;
 			}
@@ -446,13 +452,14 @@ export async function getFullStructure(pdfDocument, onnxRuntimeProvider, modelPr
 		}
 
 		for (let context of contexts) {
-			collectInferredHeadings(context);
+			collectContentsCandidates(context);
 			contentsContexts.push({
 				i: context.i,
 				lines: context.lines.map(line => ({
 					id: line.id,
 					text: line.text,
 					rect: line.rect,
+					words: line.words.map(word => ({ text: word.text, rect: word.rect })),
 					startOffset: line.startOffset,
 					endOffset: line.endOffset,
 				})),
@@ -465,7 +472,7 @@ export async function getFullStructure(pdfDocument, onnxRuntimeProvider, modelPr
 	}
 
 	// Confirm printed navigation only after inference has seen the whole PDF.
-	const headingIndex = createContentsHeadingIndex(inferredHeadings);
+	const headingIndex = createContentsHeadingIndex(contentsCandidates);
 	const contentsRegionsByPage = new Map(detectContentsRegions(contentsContexts.map(context => ({
 		pageIndex: context.i,
 		lines: context.lines,
@@ -497,6 +504,8 @@ export async function getFullStructure(pdfDocument, onnxRuntimeProvider, modelPr
 		await appendPageContext({ ...context, chars, page }, true);
 	}
 	contentsContexts = null;
+	contentsCandidates = null;
+	headingIndex.clear();
 
 	let contentOffset = 0;
 	for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {

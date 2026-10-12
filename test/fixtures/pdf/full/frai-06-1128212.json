@@ -39,84 +39,244 @@
 			{"viewRect": [0, 0, 595.26, 842.116], "contentRange": [[257], [260]], "label": "15"}
 		],
 		"outline": [
-			{"title": "1. Introduction", "source": "native", "ref": [15]},
 			{
-				"title": "2. Preliminaries",
+				"title": "No silver bullet: interpretable ML models must be explained",
 				"source": "native",
-				"ref": [28],
+				"ref": [9],
+				"target": {"position": {"pageIndex": 0, "rect": [215.628, 750.657, 215.628, 750.657]}},
 				"children": [
-					{"title": "2.1. Classification problems", "source": "native", "ref": [29]},
 					{
-						"title": "2.2. ML models regarded as interpretable",
+						"title": "1. Introduction",
 						"source": "native",
-						"ref": [33],
+						"ref": [15],
+						"target": {"position": {"pageIndex": 0, "rect": [215.628, 365.593, 215.628, 365.593]}}
+					},
+					{
+						"title": "2. Preliminaries",
+						"source": "native",
+						"ref": [28],
+						"target": {"position": {"pageIndex": 1, "rect": [305.513, 704.313, 305.513, 704.313]}},
 						"children": [
-							{"title": "2.2.1. Decision trees", "source": "native", "ref": [35]},
-							{"title": "2.2.2. Decision lists and sets", "source": "native", "ref": [40]}
+							{
+								"title": "2.1. Classification problems",
+								"source": "native",
+								"ref": [29],
+								"target": {"position": {"pageIndex": 1, "rect": [305.513, 683.906, 305.513, 683.906]}}
+							},
+							{
+								"title": "2.2. ML models regarded as interpretable",
+								"source": "native",
+								"ref": [33],
+								"target": {"position": {"pageIndex": 1, "rect": [305.513, 306.142, 305.513, 306.142]}},
+								"children": [
+									{
+										"title": "2.2.1. Decision trees",
+										"source": "native",
+										"ref": [35],
+										"target": {"position": {"pageIndex": 1, "rect": [305.513, 183.861, 305.513, 183.861]}}
+									},
+									{
+										"title": "2.2.2. Decision lists and sets",
+										"source": "native",
+										"ref": [40],
+										"target": {"position": {"pageIndex": 2, "rect": [49.6144, 618.14, 49.6144, 618.14]}}
+									}
+								]
+							},
+							{
+								"title": "2.3. Logic foundations",
+								"source": "native",
+								"ref": [50],
+								"target": {"position": {"pageIndex": 2, "rect": [305.513, 704.657, 305.513, 704.657]}}
+							}
 						]
 					},
-					{"title": "2.3. Logic foundations", "source": "native", "ref": [50]}
-				]
-			},
-			{
-				"title": "3. Logic-based explainable AI",
-				"source": "native",
-				"ref": [53],
-				"children": [
-					{"title": "3.1. Abductive explanations (AXp's)", "source": "native", "ref": [60]},
-					{"title": "3.2. Contrastive explanations (CXp's)", "source": "native", "ref": [80]},
-					{"title": "3.3. Duality between AXp's and CXp's", "source": "native", "ref": [92]},
-					{"title": "3.4. Current status of logic-based explainability", "source": "native", "ref": [97]}
-				]
-			},
-			{
-				"title": "4. How to understand interpretable ML models?",
-				"source": "native",
-				"ref": [103],
-				"children": [
-					{"title": "4.1. How to comprehend predictions?", "source": "native", "ref": [105]},
-					{"title": "4.2. Defining model comprehensibility", "source": "native", "ref": [115]},
 					{
-						"title": "4.3. Are interpretable models indeed comprehensible?",
+						"title": "3. Logic-based explainable AI",
 						"source": "native",
-						"ref": [126],
+						"ref": [53],
+						"target": {"position": {"pageIndex": 2, "rect": [305.513, 152.324, 305.513, 152.324]}},
 						"children": [
-							{"title": "4.3.1. Decision trees", "source": "native", "ref": [128]},
-							{"title": "4.3.2. Decision lists", "source": "native", "ref": [139]}
+							{
+								"title": "3.1. Abductive explanations (AXp's)",
+								"source": "native",
+								"ref": [60],
+								"target": {"position": {"pageIndex": 3, "rect": [49.6144, 228.74, 49.6144, 228.74]}}
+							},
+							{
+								"title": "3.2. Contrastive explanations (CXp's)",
+								"source": "native",
+								"ref": [80],
+								"target": {"position": {"pageIndex": 4, "rect": [49.6144, 484.983, 49.6144, 484.983]}}
+							},
+							{
+								"title": "3.3. Duality between AXp's and CXp's",
+								"source": "native",
+								"ref": [92],
+								"target": {"position": {"pageIndex": 4, "rect": [305.513, 466.626, 305.513, 466.626]}}
+							},
+							{
+								"title": "3.4. Current status of logic-based explainability",
+								"source": "native",
+								"ref": [97],
+								"target": {"position": {"pageIndex": 4, "rect": [305.513, 189.091, 305.513, 189.091]}}
+							}
 						]
+					},
+					{
+						"title": "4. How to understand interpretable ML models?",
+						"source": "native",
+						"ref": [103],
+						"target": {"position": {"pageIndex": 5, "rect": [49.6144, 529.086, 49.6144, 529.086]}},
+						"children": [
+							{
+								"title": "4.1. How to comprehend predictions?",
+								"source": "native",
+								"ref": [105],
+								"target": {"position": {"pageIndex": 5, "rect": [49.6144, 364.31, 49.6144, 364.31]}}
+							},
+							{
+								"title": "4.2. Defining model comprehensibility",
+								"source": "native",
+								"ref": [115],
+								"target": {"position": {"pageIndex": 5, "rect": [305.513, 462.904, 305.513, 462.904]}}
+							},
+							{
+								"title": "4.3. Are interpretable models indeed comprehensible?",
+								"source": "native",
+								"ref": [126],
+								"target": {"position": {"pageIndex": 6, "rect": [49.6144, 527.405, 49.6144, 527.405]}},
+								"children": [
+									{
+										"title": "4.3.1. Decision trees",
+										"source": "native",
+										"ref": [128],
+										"target": {"position": {"pageIndex": 6, "rect": [49.6144, 392.703, 49.6144, 392.703]}}
+									},
+									{
+										"title": "4.3.2. Decision lists",
+										"source": "native",
+										"ref": [139],
+										"target": {"position": {"pageIndex": 6, "rect": [305.513, 633.344, 305.513, 633.344]}}
+									}
+								]
+							}
+						]
+					},
+					{
+						"title": "5. Non-comprehensibility of interpretable models",
+						"source": "native",
+						"ref": [161],
+						"target": {"position": {"pageIndex": 7, "rect": [305.513, 471.351, 305.513, 471.351]}},
+						"children": [
+							{
+								"title": "5.1. Non-comprehensibility of decision trees",
+								"source": "native",
+								"ref": [163],
+								"target": {"position": {"pageIndex": 7, "rect": [305.513, 321.535, 305.513, 321.535]}}
+							},
+							{
+								"title": "5.2. Non-comprehensibility of decision lists",
+								"source": "native",
+								"ref": [169],
+								"target": {"position": {"pageIndex": 8, "rect": [49.6144, 772.383, 49.6144, 772.383]}}
+							},
+							{
+								"title": "5.3. Non-comprehensibility of decision sets",
+								"source": "native",
+								"ref": [173],
+								"target": {"position": {"pageIndex": 8, "rect": [49.6144, 584.381, 49.6144, 584.381]}}
+							},
+							{
+								"title": "5.4. Answering WHYNOT questions can be hard",
+								"source": "native",
+								"ref": [175],
+								"target": {"position": {"pageIndex": 8, "rect": [49.6144, 407.925, 49.6144, 407.925]}}
+							}
+						]
+					},
+					{
+						"title": "6. Experimental evidence",
+						"source": "native",
+						"ref": [198],
+						"target": {"position": {"pageIndex": 9, "rect": [49.6144, 128.276, 49.6144, 128.276]}},
+						"children": [
+							{
+								"title": "6.1. Measuring explanation redundancy",
+								"source": "native",
+								"ref": [204],
+								"target": {"position": {"pageIndex": 9, "rect": [305.513, 314.877, 305.513, 314.877]}}
+							},
+							{
+								"title": "6.2. Redundancy of default explanations",
+								"source": "native",
+								"ref": [211],
+								"target": {"position": {"pageIndex": 10, "rect": [49.6144, 697.99, 49.6144, 697.99]}}
+							},
+							{
+								"title": "6.3. Additional classifiers",
+								"source": "native",
+								"ref": [215],
+								"target": {"position": {"pageIndex": 10, "rect": [49.6144, 126.731, 49.6144, 126.731]}}
+							}
+						]
+					},
+					{
+						"title": "7. Discussion",
+						"source": "native",
+						"ref": [218],
+						"target": {"position": {"pageIndex": 10, "rect": [305.513, 637.852, 305.513, 637.852]}}
+					},
+					{
+						"title": "8. Conclusion and research directions",
+						"source": "native",
+						"ref": [230],
+						"target": {"position": {"pageIndex": 11, "rect": [49.6144, 691.097, 49.6144, 691.097]}}
+					},
+					{
+						"title": "Data availability statement",
+						"source": "native",
+						"ref": [239],
+						"target": {"position": {"pageIndex": 12, "rect": [49.6144, 549.719, 49.6144, 549.719]}}
+					},
+					{
+						"title": "Author contributions",
+						"source": "native",
+						"ref": [241],
+						"target": {"position": {"pageIndex": 12, "rect": [49.6144, 455.569, 49.6144, 455.569]}}
+					},
+					{
+						"title": "Funding",
+						"source": "native",
+						"ref": [243],
+						"target": {"position": {"pageIndex": 12, "rect": [305.513, 772.383, 305.513, 772.383]}}
+					},
+					{
+						"title": "Acknowledgments",
+						"source": "native",
+						"ref": [245],
+						"target": {"position": {"pageIndex": 12, "rect": [305.513, 657.32, 305.513, 657.32]}}
+					},
+					{
+						"title": "Conflict of interest",
+						"source": "native",
+						"ref": [247],
+						"target": {"position": {"pageIndex": 12, "rect": [305.513, 575.185, 305.513, 575.185]}}
+					},
+					{
+						"title": "Publisher's note",
+						"source": "native",
+						"ref": [249],
+						"target": {"position": {"pageIndex": 12, "rect": [305.513, 493.222, 305.513, 493.222]}}
+					},
+					{
+						"title": "References",
+						"source": "native",
+						"ref": [251],
+						"target": {"position": {"pageIndex": 12, "rect": [49.6144, 357.544, 49.6144, 357.544]}}
 					}
 				]
-			},
-			{
-				"title": "5. Non-comprehensibility of interpretable models",
-				"source": "native",
-				"ref": [161],
-				"children": [
-					{"title": "5.1. Non-comprehensibility of decision trees", "source": "native", "ref": [163]},
-					{"title": "5.2. Non-comprehensibility of decision lists", "source": "native", "ref": [169]},
-					{"title": "5.3. Non-comprehensibility of decision sets", "source": "native", "ref": [173]},
-					{"title": "5.4. Answering WHYNOT questions can be hard", "source": "native", "ref": [175]}
-				]
-			},
-			{
-				"title": "6. Experimental evidence",
-				"source": "native",
-				"ref": [198],
-				"children": [
-					{"title": "6.1. Measuring explanation redundancy", "source": "native", "ref": [204]},
-					{"title": "6.2. Redundancy of default explanations", "source": "native", "ref": [211]},
-					{"title": "6.3. Additional classifiers", "source": "native", "ref": [215]}
-				]
-			},
-			{"title": "7. Discussion", "source": "native", "ref": [218]},
-			{"title": "8. Conclusion and research directions", "source": "native", "ref": [230]},
-			{"title": "Data availability statement", "source": "native", "ref": [239]},
-			{"title": "Author contributions", "source": "native", "ref": [241]},
-			{"title": "Funding", "source": "native", "ref": [243]},
-			{"title": "Acknowledgments", "source": "native", "ref": [245]},
-			{"title": "Conflict of interest", "source": "native", "ref": [247]},
-			{"title": "Publisher's note", "source": "native", "ref": [249]},
-			{"title": "References", "source": "native", "ref": [251]}
+			}
 		]
 	},
 	"content": [

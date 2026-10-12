@@ -8,7 +8,7 @@ PAGE_WIDTH = 612
 PAGE_HEIGHT = 792
 
 CHAPTERS = [
-    ("Orbit Manual", "Quiet Signals"),
+    ("İnceleme Rehberi", "Quiet Signals"),
     ("Harbor Ledger", "Blue Measures"),
     ("Field Atlas", "Small Coordinates"),
     ("Archive Compass", "Paper Roads"),
@@ -18,7 +18,7 @@ CHAPTERS = [
 
 
 def pdf_string(value):
-    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)").replace("İ", "\\200")
 
 
 def draw_text(commands, font, size, x, y, value):
@@ -88,9 +88,10 @@ def build_pdf(page_streams):
 
     catalog_ref = add_object()
     pages_ref = add_object()
+    encoding_ref = add_object(b"<< /Type /Encoding /BaseEncoding /StandardEncoding /Differences [128 /Idotaccent] >>")
     font_refs = {
-        "F1": add_object(b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>"),
-        "F2": add_object(b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>"),
+        "F1": add_object(f"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding {encoding_ref} 0 R >>".encode("ascii")),
+        "F2": add_object(f"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold /Encoding {encoding_ref} 0 R >>".encode("ascii")),
         "F3": add_object(b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Italic >>"),
         "F4": add_object(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
         "F5": add_object(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"),

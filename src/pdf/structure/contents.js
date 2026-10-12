@@ -3,6 +3,7 @@ const MIN_MATCH_DENSITY = 0.5;
 const MIN_ORDERED_FRACTION = 0.75;
 const MIN_TITLE_LENGTH = 5;
 const MAX_WRAPPED_ENTRY_LINES = 4;
+const NUMERIC_LABEL_RE = /^\s*[0-9]+(?:[.-][0-9]+)*[.)]?\s+/u;
 
 function isValidRect(rect) {
 	return Array.isArray(rect)
@@ -15,7 +16,7 @@ function isValidRect(rect) {
 		&& rect[3] >= rect[1];
 }
 
-function compactText(text) {
+export function compactText(text) {
 	const value = String(text || '');
 	let ascii = true;
 	let compact = '';
@@ -42,23 +43,42 @@ function getTitleKey(text) {
 	return key.length >= MIN_TITLE_LENGTH ? key : null;
 }
 
-function getTrailingLocatorKey(text) {
-	const token = String(text || '').trim().split(/\s+/).at(-1);
-	return token ? compactText(token) : '';
-}
-
 function getMatchedLocatorKey(text, titleKey) {
 	const textKey = compactText(text);
-	const locatorKey = getTrailingLocatorKey(text);
-	return locatorKey
-		&& textKey.length > titleKey.length
-		&& textKey.endsWith(locatorKey)
-		? locatorKey
-		: '';
+	return textKey.startsWith(titleKey) ? textKey.slice(titleKey.length) : '';
 }
 
 export function contentsLocatorMatchesPageLabel(locatorKey, pageLabel) {
 	return Boolean(locatorKey) && locatorKey === compactText(pageLabel);
+}
+
+// Repeated exact body-title matches can establish printed numbering even when
+// page-label extraction misses chapter-opening pages. Do not guess across
+// conflicting numbering sequences.
+export function inferContentsPageLabels(regions, pageLabels) {
+	const sequences = new Map();
+	for (const region of regions || []) {
+		for (const row of region.rows || []) {
+			const match = /^(.*?)([0-9]+)$/u.exec(row.locatorKey || '');
+			if (!match || !Number.isInteger(row.targetPage)) continue;
+			const number = Number(match[2]);
+			if (!Number.isSafeInteger(number)) continue;
+			const sequence = sequences.get(match[1]) || { offsets: new Set(), pages: new Set() };
+			sequence.offsets.add(row.targetPage - number);
+			sequence.pages.add(row.targetPage);
+			sequences.set(match[1], sequence);
+		}
+	}
+	const labels = pageLabels.map(label => new Set([compactText(label)]));
+	for (const [prefix, sequence] of sequences) {
+		if (sequence.offsets.size !== 1 || sequence.pages.size < MIN_MATCHED_HEADINGS) continue;
+		const [offset] = sequence.offsets;
+		for (let page = 0; page < labels.length; page++) {
+			const number = page - offset;
+			if (number >= 0) labels[page].add(prefix + number);
+		}
+	}
+	return labels;
 }
 
 function getLineId(line, fallback) {
@@ -123,33 +143,35 @@ function orderedFraction(values) {
 }
 
 export function createContentsHeadingIndex(nodes) {
-	const entries = [];
 	const entriesByPrefix = new Map();
-	for (let index = 0; index < (nodes || []).length; index++) {
-		const node = nodes[index];
+	for (const node of nodes || []) {
 		if (!Number.isInteger(node?._pageIndex)) continue;
 		const key = getTitleKey(node.title);
 		if (!key) continue;
 		const entry = {
-			index,
 			key,
 			title: node.title,
 			targetPage: node._pageIndex,
+			sourceBlocks: node._sourceBlocks || [node],
+			requiresLink: node._requiresLink === true,
 		};
-		entries.push(entry);
 		const prefix = key.slice(0, MIN_TITLE_LENGTH);
 		const prefixEntries = entriesByPrefix.get(prefix) || [];
 		prefixEntries.push(entry);
 		entriesByPrefix.set(prefix, prefixEntries);
 	}
-	return { entries, entriesByPrefix };
+	return entriesByPrefix;
+}
+
+function getLinkRects(link) {
+	return link?.src?.rects?.length ? link.src.rects : [link?.src?.rect];
 }
 
 function getLinkedDestinations(line, links) {
 	const destinations = new Map();
 	for (const link of links || []) {
 		if (!Number.isInteger(link?.dest?.pageIndex)) continue;
-		if (!rectsIntersect(line.rect, link?.src?.rect)) continue;
+		if (!getLinkRects(link).some(rect => rectsIntersect(line.rect, rect))) continue;
 		const destination = {
 			pageIndex: link.dest.pageIndex,
 			...(isValidRect(link.dest.rect) && { rect: link.dest.rect.slice() }),
@@ -172,19 +194,17 @@ function getLinesLinkedDestinations(lines, links) {
 }
 
 function getHeadingCandidates(headingIndex, lineKey) {
-	if (headingIndex?.entriesByPrefix instanceof Map) {
-		return headingIndex.entriesByPrefix.get(
-			lineKey.slice(0, MIN_TITLE_LENGTH),
-		) || [];
-	}
-	return headingIndex?.entries || [];
+	return headingIndex?.get(lineKey.slice(0, MIN_TITLE_LENGTH)) || [];
 }
 
-function matchHeadingKey(lineKey, headingIndex, pageIndex) {
+function matchHeadingKey(lineKey, headingIndex, pageIndex, destinations = []) {
 	if (!lineKey) return null;
 	const matches = getHeadingCandidates(headingIndex, lineKey)
 		.filter(entry => (
 			entry.targetPage > pageIndex
+			&& (!entry.requiresLink || (destinations.length > 0
+				&& /^(?:[0-9]+|[ivxlcdm]+)$/iu.test(lineKey.slice(entry.key.length))))
+			&& (!destinations.length || destinations.some(dest => dest.pageIndex === entry.targetPage))
 			&& lineKey.startsWith(entry.key)
 			&& lineKey.length - entry.key.length <= Math.max(12, Math.floor(entry.key.length * 0.3))
 		))
@@ -199,15 +219,29 @@ function matchHeadingKey(lineKey, headingIndex, pageIndex) {
 	return best[0];
 }
 
-function matchHeading(line, headingIndex, pageIndex) {
-	return matchHeadingKey(getTitleKey(line.text), headingIndex, pageIndex);
+function matchHeadingText(text, headingIndex, pageIndex, destinations) {
+	const full = matchHeadingKey(getTitleKey(text), headingIndex, pageIndex, destinations);
+	if (full) return full;
+	// Printed section labels may be separate blocks at the destination.
+	const prefix = NUMERIC_LABEL_RE.exec(text)?.[0];
+	if (!prefix) return null;
+	const match = matchHeadingKey(getTitleKey(text.slice(prefix.length)), headingIndex, pageIndex, destinations);
+	if (!match) return null;
+	const title = (prefix + match.title).trim();
+	return { ...match, title, key: getTitleKey(title) };
+}
+
+function matchHeading(line, headingIndex, pageIndex, links) {
+	return matchHeadingText(line.text, headingIndex, pageIndex, getLinkedDestinations(line, links));
 }
 
 function couldExtendToHeading(text, headingIndex, pageIndex) {
-	const lineKey = getTitleKey(text);
-	if (!lineKey) return true;
-	return getHeadingCandidates(headingIndex, lineKey)
-		.some(entry => entry.targetPage > pageIndex && entry.key.startsWith(lineKey));
+	return [text, text.replace(NUMERIC_LABEL_RE, '')].some(candidate => {
+		const lineKey = getTitleKey(candidate);
+		if (!lineKey) return true;
+		return getHeadingCandidates(headingIndex, lineKey)
+			.some(entry => entry.targetPage > pageIndex && entry.key.startsWith(lineKey));
+	});
 }
 
 function areWrappedEntryLines(previousLine, nextLine) {
@@ -238,13 +272,13 @@ function areWrappedEntryLines(previousLine, nextLine) {
 
 /**
  * Match physical page lines against headings inferred elsewhere in the PDF.
- * Detection deliberately has no vocabulary, locator, numbering, or link rules.
+ * Links disambiguate repeated titles; they do not independently establish contents.
  */
 export function getContentsEvidence(lines, links, headingIndex, pageIndex) {
 	const matches = [];
-	const usedEntries = new Set();
+	const usedSourceBlocks = new Set();
 	const directMatches = (lines || []).map(line => (
-		isValidRect(line?.rect) ? matchHeading(line, headingIndex, pageIndex) : null
+		isValidRect(line?.rect) ? matchHeading(line, headingIndex, pageIndex, links) : null
 	));
 	for (let index = 0; index < (lines || []).length; index++) {
 		const line = lines[index];
@@ -260,16 +294,21 @@ export function getContentsEvidence(lines, links, headingIndex, pageIndex) {
 				nextIndex++
 			) {
 				const nextLine = lines[nextIndex];
+				// A wrapped link can have a final fragment that also matches body
+				// text independently. Prefer the complete title at the same destination.
+				const linkedContinuation = directMatches[nextIndex]
+					&& getLinesLinkedDestinations(matchedLines, links).length === 1
+					&& getLinkedDestinations(nextLine, links).length === 1
+					&& getLinesLinkedDestinations([...matchedLines, nextLine], links).length === 1;
 				if (
-					directMatches[nextIndex]
+					(directMatches[nextIndex] && !linkedContinuation)
 					|| !areWrappedEntryLines(matchedLines.at(-1), nextLine)
 				) {
 					break;
 				}
 				matchedLines.push(nextLine);
 				combinedText += ` ${nextLine.text || ''}`;
-				const combinedKey = getTitleKey(combinedText);
-				heading = matchHeadingKey(combinedKey, headingIndex, pageIndex);
+				heading = matchHeadingText(combinedText, headingIndex, pageIndex, getLinesLinkedDestinations(matchedLines, links));
 				if (heading) {
 					break;
 				}
@@ -278,8 +317,10 @@ export function getContentsEvidence(lines, links, headingIndex, pageIndex) {
 				}
 			}
 		}
-		if (!heading || usedEntries.has(heading.index)) continue;
-		usedEntries.add(heading.index);
+		// Alternative compositions of the same body fragments are not
+		// independent evidence for a contents region.
+		if (!heading || heading.sourceBlocks.some(block => usedSourceBlocks.has(block))) continue;
+		for (const block of heading.sourceBlocks) usedSourceBlocks.add(block);
 		matches.push({
 			lineIds: matchedLines.map((matchedLine, matchedIndex) => (
 				getLineId(matchedLine, index + matchedIndex)
@@ -336,13 +377,13 @@ function getContentsPageState(lines, pageRect, options = {}) {
 
 	const firstOffset = matches[0].startOffset;
 	const lastOffset = matches.at(-1).endOffset;
+	const matchedLineIds = new Set(matches.flatMap(match => match.lineIds));
 	const spanLines = lines.filter((line, index) => (
 		isValidRect(line?.rect)
-		&& getTitleKey(line.text)
+		&& (matchedLineIds.has(getLineId(line, index)) || getTitleKey(line.text))
 		&& getLineStartOffset(line, index) >= firstOffset
 		&& getLineEndOffset(line, index) <= lastOffset
 	));
-	const matchedLineIds = new Set(matches.flatMap(match => match.lineIds));
 	return {
 		lines,
 		pageRect,
@@ -357,6 +398,9 @@ function getContentsPageState(lines, pageRect, options = {}) {
 function isConfirmedContentsRun(states) {
 	const matches = states.flatMap(state => state.matches);
 	if (matches.length < MIN_MATCHED_HEADINGS) return false;
+	// Repeated title/credit pages can match several independent text blocks
+	// at one location. Navigation evidence must progress through the document.
+	if (new Set(matches.map(match => match.targetPage)).size < 2) return false;
 	if (orderedFraction(matches.map(match => match.targetPage)) < MIN_ORDERED_FRACTION) return false;
 	const matchedLineCount = states.reduce((count, state) => count + state.matchedLineIds.size, 0);
 	const spanLineCount = states.reduce((count, state) => count + state.spanLines.length, 0);
@@ -367,20 +411,91 @@ function hasContentsPageDensity(state) {
 	return state.matchedLineIds.size / Math.max(1, state.spanLines.length) >= MIN_MATCH_DENSITY;
 }
 
+function getFullyLinkedDestination(line, links) {
+	const destinations = getLinkedDestinations(line, links);
+	if (destinations.length !== 1 || !line.words?.length) return null;
+	const rects = (links || [])
+		.filter(link => link?.dest?.pageIndex === destinations[0].pageIndex)
+		.flatMap(getLinkRects)
+		.filter(isValidRect);
+	const covered = line.words.every(word => {
+		if (!isValidRect(word.rect)) return false;
+		const x = (word.rect[0] + word.rect[2]) / 2;
+		const y = (word.rect[1] + word.rect[3]) / 2;
+		return rects.some(rect => x >= rect[0] && x <= rect[2] && y >= rect[1] && y <= rect[3]);
+	});
+	return covered ? destinations[0] : null;
+}
+
+function getContentsLineGap(a, b) {
+	if (!isValidRect(a?.rect) || !isValidRect(b?.rect)) return Infinity;
+	if (Math.min(a.rect[2], b.rect[2]) <= Math.max(a.rect[0], b.rect[0])) return Infinity;
+	if (b.rect[3] > a.rect[3]) return Infinity;
+	return Math.max(0, a.rect[1] - b.rect[3]);
+}
+
+// Confirmation uses independent body-heading matches. Once confirmed, extend
+// through adjacent, fully linked rows that continue its page sequence and
+// observed spacing. An inline citation in surrounding prose is insufficient.
+function getCompleteContentsSpan(state) {
+	const { lines, spanLines, matches, links, pageIndex } = state;
+	const result = spanLines.slice();
+	const gaps = spanLines.slice(1).map((line, index) => getContentsLineGap(spanLines[index], line))
+		.filter(Number.isFinite);
+	const maxGap = Math.max(0, ...gaps) + 0.01;
+	for (const direction of [-1, 1]) {
+		let edge = direction < 0 ? result[0] : result.at(-1);
+		let targetPage = direction < 0 ? matches[0].targetPage : matches.at(-1).targetPage;
+		for (let index = lines.indexOf(edge) + direction; index >= 0 && index < lines.length; index += direction) {
+			const line = lines[index];
+			const destination = getFullyLinkedDestination(line, links);
+			const gap = direction < 0 ? getContentsLineGap(line, edge) : getContentsLineGap(edge, line);
+			if (!getTitleKey(line.text) || !destination || gap > maxGap
+				|| destination.pageIndex <= pageIndex
+				|| direction * (destination.pageIndex - targetPage) < 0) break;
+			if (direction < 0) result.unshift(line);
+			else result.push(line);
+			edge = line;
+			targetPage = destination.pageIndex;
+		}
+	}
+	return result;
+}
+
+function getAlignedLocator(line, locatorEdges) {
+	const words = line.words || [];
+	if (words.length < 2) return null;
+	const last = words.at(-1);
+	const previous = words.at(-2);
+	if (!isValidRect(last.rect) || !isValidRect(previous.rect)) return null;
+	const height = getLineHeight(line);
+	if (last.rect[0] - previous.rect[2] <= height) return null;
+	if (!locatorEdges.some(edge => Math.abs(last.rect[2] - edge) <= height / 2)) return null;
+	const locatorKey = compactText(last.text);
+	return locatorKey ? { title: words.slice(0, -1).map(word => word.text).join(' '), locatorKey } : null;
+}
+
 function buildContentsRegion(state) {
-	const { lines, pageRect, links, matches, spanLines, matchedLineIds } = state;
+	const { lines, pageRect, links, matches, matchedLineIds } = state;
+	const spanLines = getCompleteContentsSpan(state);
+	const locatorEdges = matches.flatMap(match => {
+		const lastWord = lines[match.lineIds.at(-1)]?.words?.at(-1);
+		return lastWord && isValidRect(lastWord.rect) && compactText(lastWord.text) === match.locatorKey
+			? [lastWord.rect[2]] : [];
+	});
 
 	const matchesByLine = new Map(matches.map(match => [match.lineIds[0], match]));
 	const rows = spanLines.flatMap((line) => {
 		const lineId = getLineId(line, lines.indexOf(line));
 		if (matchedLineIds.has(lineId) && !matchesByLine.has(lineId)) return [];
 		const match = matchesByLine.get(lineId);
+		const locator = match || getAlignedLocator(line, locatorEdges);
 		return [{
 			lineIds: match?.lineIds || [lineId],
-			title: match?.title || String(line.text || '').trim(),
-			titleKey: match?.titleKey || getTitleKey(line.text),
+			title: locator?.title || String(line.text || '').trim(),
+			titleKey: match?.titleKey || getTitleKey(locator?.title || line.text),
 			...(Number.isInteger(match?.targetPage) && { targetPage: match.targetPage }),
-			...(match?.locatorKey && { locatorKey: match.locatorKey }),
+			...(locator?.locatorKey && { locatorKey: locator.locatorKey }),
 			linkDestinations: match?.linkDestinations
 				|| getLinkedDestinations(line, links),
 		}];

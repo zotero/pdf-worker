@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	createContentsHeadingIndex,
+	inferContentsPageLabels,
 	detectContentsRegion,
 	getContentsEvidence,
 	normalizeContentsBlocks,
@@ -97,6 +98,16 @@ function makeInternalLinks(lines, firstTargetPage = 10) {
 }
 
 describe('PDF printed contents detection', () => {
+	it('separates a confirmed title from a page label without whitespace', () => {
+		const titles = ['First study', 'Second study', 'Third study', 'Fourth study'];
+		const lines = titles.map((title, index) => makeLine(
+			index, `${title}........${index + 10}`, [60, 700 - index * 20, 520, 714 - index * 20],
+		));
+		const evidence = getEvidence(lines, titles);
+
+		assert.deepEqual(evidence.matches.map(match => match.locatorKey), ['10', '11', '12', '13']);
+	});
+
 	function getEvidence(lines, titles, firstTargetPage = 10, links = []) {
 		const index = createContentsHeadingIndex(makeHeadingNodes(titles, firstTargetPage));
 		return getContentsEvidence(lines, links, index, 0);
@@ -180,6 +191,18 @@ describe('PDF printed contents detection', () => {
 			region?.rows.map(row => row.lineIds),
 			[[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]],
 		);
+	});
+
+	it('retains short first fragments of confirmed wrapped entries', () => {
+		const titles = Array.from({ length: 4 }, (_, index) => `${index + 1}. A sufficiently descriptive chapter title`);
+		const lines = titles.flatMap((_, index) => [
+			makeLine(index * 2, `${index + 1}.`, [60, 710 - index * 40, 90, 724 - index * 40]),
+			makeNavigationLine(index * 2 + 1, 'A sufficiently descriptive chapter title', String(index + 10), [60, 694 - index * 40, 520, 708 - index * 40]),
+		]);
+		const evidence = getEvidence(lines, titles);
+		const region = detectContentsRegion(lines, PAGE_RECT, { evidence });
+		assert.deepEqual(region?.rows.map(row => row.lineIds), [[0, 1], [2, 3], [4, 5], [6, 7]]);
+		assert.deepEqual(region?.rows.map(row => row.title), titles);
 	});
 
 	it('does not combine adjacent lines from separate columns', () => {
@@ -289,7 +312,7 @@ describe('PDF printed contents detection', () => {
 	it('does not use internal links as an independent detector', () => {
 		const lines = makeInlineContents(6);
 		const links = makeInternalLinks(lines.slice(1), 50);
-		const evidence = getContentsEvidence(lines, links, { entries: [] }, 0);
+		const evidence = getContentsEvidence(lines, links, createContentsHeadingIndex([]), 0);
 
 		assert.equal(evidence.matches.length, 0);
 		assert.equal(detectContentsRegion(lines, PAGE_RECT, { evidence }), null);
@@ -310,6 +333,52 @@ describe('PDF printed contents detection', () => {
 		const evidence = getContentsEvidence(lines, [], index, 0);
 
 		assert.equal(evidence.matches.length, 0);
+	});
+
+	it('uses destination pages to disambiguate repeated titles without accepting conflicting links', () => {
+		const title = 'A repeated section title';
+		const lines = Array.from({ length: 4 }, (_, index) => makeNavigationLine(
+			index, title, String(index + 10), [60, 700 - index * 24, 520, 714 - index * 24],
+		));
+		const headingIndex = createContentsHeadingIndex(lines.map((_, index) => ({ title, _pageIndex: index + 10 })));
+		const links = makeInternalLinks(lines, 10);
+		const evidence = getContentsEvidence(lines, links, headingIndex, 0);
+		assert.deepEqual(evidence.matches.map(match => match.targetPage), [10, 11, 12, 13]);
+		assert.equal(detectContentsRegion(lines, PAGE_RECT, { evidence, links })?.rows.length, 4);
+		assert.equal(getContentsEvidence(lines, makeInternalLinks(lines, 20), headingIndex, 0).matches.length, 0);
+	});
+
+	it('does not use the empty space between annotation rectangles as linked text', () => {
+		const line = makeLine(0, 'Independent heading', [60, 660, 300, 674]);
+		const index = createContentsHeadingIndex([{ title: line.text, _pageIndex: 2 }]);
+		const links = [{
+			src: { rect: [60, 630, 300, 710], rects: [[60, 690, 300, 710], [60, 630, 300, 650]] },
+			dest: { pageIndex: 3 },
+		}];
+		const evidence = getContentsEvidence([line], links, index, 0);
+		assert.equal(evidence.matches.length, 1);
+		assert.deepEqual(evidence.matches[0].linkDestinations, []);
+	});
+
+	it('extends confirmed contents through linked boundary rows but stops at surrounding prose', () => {
+		const titles = Array.from({ length: 4 }, (_, index) => `Matched section ${index + 1}`);
+		const rowTitles = ['Unmatched opening', ...titles, 'Unmatched closing'];
+		const lines = [makeLine(0, 'Surrounding prose with an inline link', [60, 730, 520, 744])];
+		for (const [index, title] of rowTitles.entries()) {
+			lines.push(makeNavigationLine(index + 1, title, String(index + 2), [60, 710 - index * 20, 520, 724 - index * 20]));
+		}
+		lines.push(makeLine(7, 'Following prose with an inline link', [60, 590, 520, 604]));
+		const links = makeInternalLinks(lines.slice(1, -1), 2);
+		links.push({ src: { rect: lines[0].words[2].rect }, dest: { pageIndex: 1 } });
+		links.push({ src: { rect: lines[7].words[2].rect }, dest: { pageIndex: 8 } });
+		const index = createContentsHeadingIndex(makeHeadingNodes(titles, 3));
+		const evidence = getContentsEvidence(lines, links, index, 0);
+		const region = detectContentsRegion(lines, PAGE_RECT, { evidence, links, pageIndex: 0 });
+		assert.deepEqual(region?.rows.map(row => row.lineIds[0]), [1, 2, 3, 4, 5, 6]);
+		assert.deepEqual(region?.rows.map(row => row.title), rowTitles);
+		assert.deepEqual(region?.rows.map(row => row.locatorKey), ['2', '3', '4', '5', '6', '7']);
+		links[0].dest.pageIndex = 20;
+		assert.deepEqual(detectContentsRegion(lines, PAGE_RECT, { evidence, links, pageIndex: 0 })?.rows.map(row => row.lineIds[0]), [2, 3, 4, 5, 6]);
 	});
 
 	it('normalizes accepted contents independently of the model block type', () => {
@@ -415,7 +484,7 @@ describe('PDF printed contents detection', () => {
 		assert.deepEqual(outline[0].ref, [1]);
 	});
 
-	it('recovers an exact linked paragraph from styles anchored in the same region', async () => {
+	it('recovers an exact linked paragraph from confirmed printed contents', async () => {
 		const blocks = [
 			makeOutlineBlock('heading', 'First section', 1),
 			makeOutlineBlock('paragraph', 'Body text', 1, 'Body', 10),
@@ -427,7 +496,7 @@ describe('PDF printed contents detection', () => {
 		const outline = await getOutline(blocks, [], null, [], {
 			navigationRegions: [{
 				pageIndex: 0,
-				source: 'destination-link',
+				source: 'heading-concentration',
 				rows: [
 					{ title: 'First section', linkDestinations: [{ pageIndex: 1, rect: [60, 700, 60, 700] }] },
 					{ title: 'Second section', linkDestinations: [{ pageIndex: 2, rect: [60, 700, 60, 700] }] },
@@ -453,7 +522,7 @@ describe('PDF printed contents detection', () => {
 		const withNavigation = await getOutline(blocks, [], null, [], {
 			navigationRegions: [{
 				pageIndex: 0,
-				source: 'destination-link',
+				source: 'heading-concentration',
 				rows: [
 					{ title: 'First section', linkDestinations: [{ pageIndex: 1, rect: [60, 700, 60, 700] }] },
 					{ title: 'Second section', linkDestinations: [{ pageIndex: 2, rect: [60, 700, 60, 700] }] },
@@ -466,86 +535,8 @@ describe('PDF printed contents detection', () => {
 		assert.ok(flattenOutlineRefs(withNavigation).some(ref => ref[0] === 2));
 	});
 
-	it('preserves a body heading with a unique exact contents match', async () => {
-		const blocks = [
-			makeOutlineBlock('heading', 'First section', 1, 'Heading', 18),
-			makeOutlineBlock('heading', 'Unique preface', 2, 'Unique', 16),
-			makeOutlineBlock('heading', 'Preface subsection', 3, 'Subheading', 14),
-		];
-		const baseline = await getOutline(structuredClone(blocks), [], null, []);
-		const enriched = await getOutline(blocks, [], null, [], {
-			navigationRegions: [{
-				pageIndex: 0,
-				source: 'layout-navigation',
-				rows: [
-					{ title: 'Unique preface' },
-				],
-			}],
-		});
 
-		assert.ok(!flattenOutlineRefs(baseline).some(ref => ref[0] === 1));
-		assert.ok(flattenOutlineRefs(enriched).some(ref => ref[0] === 1));
-		for (const ref of flattenOutlineRefs(baseline)) {
-			assert.ok(flattenOutlineRefs(enriched).some(candidate => candidate[0] === ref[0]));
-		}
-	});
 
-	it('does not recover an unlinked row or a linked object caption', async () => {
-		const blocks = [
-			makeOutlineBlock('heading', 'First section', 1),
-			makeOutlineBlock('paragraph', 'Body text', 1, 'Body', 10),
-			makeOutlineBlock('heading', 'Second section', 2),
-			makeOutlineBlock('paragraph', 'Body text', 2, 'Body', 10),
-			makeOutlineBlock('paragraph', 'Unlinked heading', 3),
-			makeOutlineBlock('paragraph', 'Body text', 3, 'Body', 10),
-			makeOutlineBlock('paragraph', 'Illustration caption', 4),
-			{
-				...makeOutlineBlock('image', '', 4),
-				flowClass: 'auxiliary',
-			},
-		];
-		const outline = await getOutline(blocks, [], null, [], {
-			navigationRegions: [{
-				pageIndex: 0,
-				source: 'layout-navigation',
-				rows: [
-					{ title: 'Unlinked heading', linkDestinations: [] },
-					{ title: 'Illustration caption', linkDestinations: [{ pageIndex: 4 }] },
-				],
-			}],
-		});
-		const refs = flattenOutlineRefs(outline);
-
-		assert.ok(!refs.some(ref => ref[0] === 4));
-		assert.ok(!refs.some(ref => ref[0] === 6));
-	});
-
-	it('does not recover a wrapped fragment when the link targets an existing heading', async () => {
-		const blocks = [
-			makeOutlineBlock('heading', 'First section', 1),
-			makeOutlineBlock('paragraph', 'Body text', 1, 'Body', 10),
-			makeOutlineBlock('heading', 'Second section', 2),
-			makeOutlineBlock('paragraph', 'Body text', 2, 'Body', 10),
-			makeOutlineBlock('heading', 'Full chapter title and fragment', 3),
-			makeOutlineBlock('paragraph', 'and fragment', 3),
-			makeOutlineBlock('paragraph', 'Body text', 3, 'Body', 10),
-		];
-		blocks[4].anchor.pageRects[0] = [3, 60, 700, 500, 720];
-		blocks[5].anchor.pageRects[0] = [3, 60, 650, 500, 670];
-		const outline = await getOutline(blocks, [], null, [], {
-			navigationRegions: [{
-				pageIndex: 0,
-				source: 'destination-link',
-				rows: [
-					{ title: 'First section', linkDestinations: [{ pageIndex: 1, rect: [60, 700, 60, 700] }] },
-					{ title: 'Second section', linkDestinations: [{ pageIndex: 2, rect: [60, 700, 60, 700] }] },
-					{ title: 'and fragment', linkDestinations: [{ pageIndex: 3, rect: [60, 700, 60, 700] }] },
-				],
-			}],
-		});
-
-		assert.ok(!flattenOutlineRefs(outline).some(ref => ref[0] === 5));
-	});
 
 	it('does not add a navigation heading from native-outline agreement alone', async () => {
 		const navigationHeading = {
@@ -611,5 +602,91 @@ describe('PDF printed contents detection', () => {
 		assert.ok(groupHeading);
 		assert.equal(groupHeading.type, 'list_item');
 		assert.equal(groupHeading.flowClass, 'auxiliary');
+	});
+});
+
+
+describe('Contents evidence to outline contract', () => {
+	it('preserves a printed numeric label when the destination title has none', () => {
+		const index = createContentsHeadingIndex([{ title: 'Basic concepts', _pageIndex: 8 }]);
+		const lines = [makeLine(0, '1 Basic concepts 1', [60, 700, 400, 715])];
+		const evidence = getContentsEvidence(lines, [], index, 2);
+		assert.equal(evidence.matches.length, 1);
+		assert.equal(evidence.matches[0].title, '1 Basic concepts');
+		assert.equal(evidence.matches[0].locatorKey, '1');
+		assert.equal(evidence.matches[0].targetPage, 8);
+	});
+
+	it('does not normalize repeated title and credit pages as contents', () => {
+		const titles = ['Lecture notes', 'Probability theory', 'Edited by the authors', 'University department'];
+		const index = createContentsHeadingIndex(titles.map(title => ({ title, _pageIndex: 20 })));
+		const lines = titles.map((title, i) => makeLine(i, title, [60, 700 - i * 20, 400, 715 - i * 20]));
+		const evidence = getContentsEvidence(lines, [], index, 0);
+		assert.equal(evidence.matches.length, 4);
+		assert.equal(detectContentsRegion(lines, PAGE_RECT, { pageIndex: 0, evidence }), null);
+	});
+
+	it('joins linked title fragments even when the final fragment matches independently', () => {
+		const blocks = [{}, {}];
+		const index = createContentsHeadingIndex([
+			{ title: 'Detailed experimental measurements', _pageIndex: 3, _requiresLink: true, _sourceBlocks: blocks },
+			{ title: 'measurements', _pageIndex: 3, _requiresLink: true, _sourceBlocks: [blocks[1]] },
+		]);
+		const lines = [makeLine(0, 'Detailed experimental', [60, 700, 400, 715]), makeLine(1, 'measurements 4', [60, 684, 400, 699])];
+		const links = lines.map(line => ({ src: { rect: line.rect }, dest: { pageIndex: 3, rect: [60, 720, 60, 720] } }));
+		const evidence = getContentsEvidence(lines, links, index, 0);
+		assert.equal(evidence.matches.length, 1);
+		assert.equal(evidence.matches[0].title, 'Detailed experimental measurements');
+		assert.deepEqual(evidence.matches[0].lineIds, [0, 1]);
+	});
+
+	it('requires linked locators before paragraph text can confirm contents', () => {
+		const titles = ['Alpha measurements', 'Beta measurements', 'Gamma measurements', 'Delta measurements'];
+		const index = createContentsHeadingIndex(titles.map((title, i) => ({ title, _pageIndex: i + 1, _requiresLink: true })));
+		const lines = titles.map((title, i) => makeLine(i, `${title} ${i + 1}`, [60, 700 - i * 20, 400, 715 - i * 20]));
+		const links = lines.map((line, i) => ({ src: { rect: line.rect }, dest: { pageIndex: i + 1 } }));
+		assert.equal(getContentsEvidence(lines, [], index, 0).matches.length, 0);
+		const evidence = getContentsEvidence(lines, links, index, 0);
+		assert.equal(evidence.matches.length, 4);
+		assert.ok(detectContentsRegion(lines, PAGE_RECT, { pageIndex: 0, links, evidence }));
+		const prose = lines.map((line, i) => ({ ...line, text: titles[i] + ' and more' }));
+		assert.equal(getContentsEvidence(prose, links, index, 0).matches.length, 0);
+	});
+
+	it('infers missing page labels only from independent consistent anchors', () => {
+		const rows = [1, 3, 6, 8].map(number => ({ locatorKey: String(number), targetPage: number + 2 }));
+		const labels = Array(15).fill('-');
+		assert.ok(inferContentsPageLabels([{ rows }], labels)[7].has('5'));
+		assert.ok(!inferContentsPageLabels([{ rows: rows.slice(1) }], labels)[7].has('5'));
+		assert.ok(!inferContentsPageLabels([{ rows: [...rows, { locatorKey: '9', targetPage: 12 }] }], labels)[7].has('5'));
+		assert.ok(!inferContentsPageLabels([{ rows: Array(4).fill(rows[0]) }], labels)[7].has('5'));
+	});
+
+	it('does not count overlapping heading compositions as independent evidence', () => {
+		const sourceBlocks = [{}, {}, {}];
+		const candidates = [
+			{ title: 'Composite section', _sourceBlocks: sourceBlocks.slice(0, 1) },
+			{ title: 'Composite section and methods', _sourceBlocks: sourceBlocks.slice(0, 2) },
+			{ title: 'Composite section and methods measurements', _sourceBlocks: sourceBlocks },
+			{ title: 'and methods', _sourceBlocks: sourceBlocks.slice(1, 2) },
+		];
+		const lines = candidates.map(({ title }, i) => makeLine(i, title, [60, 700 - i * 20, 400, 715 - i * 20]));
+		const index = createContentsHeadingIndex(candidates.map(node => ({ ...node, _pageIndex: 1 })));
+		const evidence = getContentsEvidence(lines, [], index, 0);
+		assert.equal(evidence.matches.length, 2);
+		assert.equal(detectContentsRegion(lines, PAGE_RECT, { pageIndex: 0, evidence }), null);
+	});
+
+	it('retains detected navigation when title-only contents has no resolvable locators', async () => {
+		const titles = ['Alpha analysis', 'Beta analysis', 'Gamma analysis', 'Delta analysis'];
+		const index = createContentsHeadingIndex(titles.map((title, i) => ({ title, _pageIndex: i + 1 })));
+		const lines = titles.map((title, i) => makeLine(i, title, [60, 700 - i * 20, 300, 715 - i * 20]));
+		const evidence = getContentsEvidence(lines, [], index, 0);
+		const region = detectContentsRegion(lines, PAGE_RECT, { pageIndex: 0, evidence });
+		assert.ok(region);
+		const blocks = titles.map((title, i) => makeOutlineBlock('heading', title, i + 1));
+		assert.deepEqual(await getOutline(blocks, [], null, [], {
+			navigationRegions: [{ ...region, pageIndex: 0 }],
+		}), await getOutline(blocks, [], null, []));
 	});
 });
