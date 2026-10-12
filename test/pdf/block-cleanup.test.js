@@ -282,6 +282,41 @@ describe('excludeRepeatedPageFurniture', () => {
 });
 
 describe('markParagraphParts', () => {
+	it('uses Unicode lowercase letters for paragraph continuation boundaries', () => {
+		for (const [first, second] of [
+			['Le signal a été', 'étudié avec soin.'],
+			['Η μέτρηση έγινε', 'σύμφωνα με το πρωτόκολλο.'],
+			['Un texte co-', 'écrit par les auteurs.'],
+		]) {
+			const structure = {
+				catalog: { pages: [{}, {}] },
+				content: [paragraph(0, first), paragraph(1, second)],
+			};
+
+			markParagraphParts(structure);
+
+			assert.deepEqual(structure.content[0].nextPart, [1]);
+			assert.deepEqual(structure.content[1].previousPart, [0]);
+		}
+	});
+
+	it('retains sentence and uppercase boundaries with Unicode text', () => {
+		for (const [first, second] of [
+			['Le signal a été étudié.', 'étude suivante'],
+			['Le signal a été', 'Étude indépendante.'],
+		]) {
+			const structure = {
+				catalog: { pages: [{}, {}] },
+				content: [paragraph(0, first), paragraph(1, second)],
+			};
+
+			markParagraphParts(structure);
+
+			assert.equal(structure.content[0].nextPart, undefined);
+			assert.equal(structure.content[1].previousPart, undefined);
+		}
+	});
+
 	it('keeps normal cross-page paragraph continuations', () => {
 		let structure = {
 			catalog: { pages: [{}, {}] },

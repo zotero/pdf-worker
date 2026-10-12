@@ -302,21 +302,8 @@ export function markParagraphParts(structure) {
 	const RAG_THRESHOLD = 1;
 	const INDENT_THRESHOLD = 1;
 
-	const isLowercaseOrNumber = (char) => {
-		if (!char || char.length === 0) {
-			return false;
-		}
-		const c = char.charAt(0);
-		return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-	};
-
-	const isLowercase = (char) => {
-		if (!char || char.length === 0) {
-			return false;
-		}
-		const c = char.charAt(0);
-		return c >= 'a' && c <= 'z';
-	};
+	const isLowercaseOrNumber = char => /^[\p{Ll}\p{Nd}]/u.test(char || '');
+	const isLowercase = char => /^\p{Ll}/u.test(char || '');
 
 	const getBlockWidth = (metrics) => {
 		if (!metrics || !Array.isArray(metrics.rect)) {
