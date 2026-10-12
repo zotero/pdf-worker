@@ -8,15 +8,13 @@ import {
 	normalizeContentsBlocks,
 } from './contents.js';
 import { getReferenceLists } from './reference/reference.js';
-import { getFigureAndMathCandidates } from './citations.js';
-import { getFigures } from './figure.js';
-import { getMathBlocks } from './math.js';
+import { addObjectRefs } from './object-refs.js';
 import { updateRegularWordsSet } from './reference/regular-words.js';
 import { getReferenceIndex } from './reference/index.js';
 import { getSupportedReferenceLists } from './reference/support.js';
 // import { getLinkOverlays } from './link.js';
 import { addPageLabels } from './page-label.js';
-import { applyRefs, getRefsList } from './apply-refs.js';
+import { applyRefs } from './apply-refs.js';
 import { getCitationRefs } from './citation-refs.js';
 import { getFootnoteRefs } from './footnote-refs.js';
 import {
@@ -529,7 +527,6 @@ export async function getFullStructure(pdfDocument, onnxRuntimeProvider, modelPr
 
 	addPageLabels(structure, catalogPageLabels);
 
-	let candidateGroups = new Map();
 	let structureIndex = createStructureIndex(structure, options.structureIndex);
 
 	let annotLinkRefs = getAnnotLinkRefs(structure, linkMap, structureIndex);
@@ -559,15 +556,10 @@ export async function getFullStructure(pdfDocument, onnxRuntimeProvider, modelPr
 	}
 	let referenceIndex = getReferenceIndex(referenceLists, regularWordsSet);
 	let citationRefs = getCitationRefs(structure, referenceIndex, annotLinkRefs, structureIndex);
-	let figures = getFigures(structure);
-	let mathBlocks = getMathBlocks(structure);
-	getFigureAndMathCandidates(structure, candidateGroups, figures, mathBlocks, structureIndex);
-	structureIndex.clearPageTextCache();
-	let mainRefs = getRefsList(candidateGroups);
-
 	addRefs(annotLinkRefs, parsedLinkRefs);
-	addRefs(citationRefs, mainRefs);
 	addRefs(citationRefs, annotLinkRefs);
+	addObjectRefs(structure, citationRefs, structureIndex);
+	structureIndex.clearPageTextCache();
 	addRefs(citationRefs, getFootnoteRefs(structure, citationRefs, structureIndex));
 
 	applyRefs(structure, citationRefs);
