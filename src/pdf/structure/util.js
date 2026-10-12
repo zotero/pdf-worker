@@ -218,7 +218,7 @@ export async function resolveDestination(pdfDocument, dest) {
 	}
 	else if (Number.isInteger(ref)) {
 		pageIndex = ref;
-		if (pageIndex < 0 || pageIndex > pdfDocument.pagesCount - 1) {
+		if (pageIndex < 0 || pageIndex >= pdfDocument.numPages) {
 			console.error(`"${pageIndex}" is not a valid page number, for destination "${dest}"`);
 			return;
 		}
@@ -228,40 +228,35 @@ export async function resolveDestination(pdfDocument, dest) {
 		return;
 	}
 
-	let { rotate, view } = await pdfDocument.getPage(pageIndex);
-	let width = view[2] - view[0];
-	let height = view[3] - view[1];
-
-	const changeOrientation = rotate % 180 !== 0;
-	const pageHeight = (changeOrientation ? width : height);
+	let { view } = await pdfDocument.getPage(pageIndex);
+	// Destinations and text geometry share unrotated PDF coordinates.
+	const [left, , , top] = view;
 
 	let x, y;
 	switch (destArray[1].name) {
 		case "XYZ":
-			x = destArray[2] !== null ? destArray[2] : 0;
-			y = destArray[3] !== null ? destArray[3] : pageHeight;
-			// No adjustment for y; use original PDF coordinates.
+			x = destArray[2] ?? left;
+			y = destArray[3] ?? top;
 			break;
 		case "Fit":
 		case "FitB":
 			// No specific x, y for Fit and FitB; the whole page is shown.
-			x = 0;
-			y = pageHeight;
+			x = left;
+			y = top;
 			break;
 		case "FitH":
 		case "FitBH":
-			y = destArray[2] !== null ? destArray[2] : pageHeight;
-			x = 0; // Default x to leftmost for horizontal fitting.
+			y = destArray[2] ?? top;
+			x = left;
 			break;
 		case "FitV":
 		case "FitBV":
-			x = destArray[2] !== null ? destArray[2] : 0;
-			y = pageHeight; // Default y to topmost for vertical fitting.
+			x = destArray[2] ?? left;
+			y = top;
 			break;
 		case "FitR":
-			x = destArray[2] !== null ? destArray[2] : 0; // Left bound of rectangle.
-			y = destArray[5] !== null ? destArray[5] : pageHeight; // Top bound of rectangle.
-			// No adjustment for y; use original PDF coordinates.
+			x = destArray[2] ?? left;
+			y = destArray[5] ?? top;
 			break;
 		default:
 			// Not a valid destination type.

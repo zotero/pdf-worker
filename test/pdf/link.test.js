@@ -223,6 +223,40 @@ describe('PDF annotation links', () => {
 		assert.deepEqual(range, { offsetStart: null, offsetEnd: null, text: '' });
 	});
 
+	it('resolves the nearest occurrence to the authored destination, including outside headings', () => {
+		for (const includeHeading of [false, true]) {
+			const sourceEntries = [{
+				blockRef: [0],
+				blockRefKey: '0',
+				bt: horizontalBlockText('12'),
+				pageRect: [0, 0, 2, 1],
+			}];
+			const destinationEntries = [{
+				blockRef: [1],
+				block: { type: 'paragraph' },
+				bt: horizontalBlockText('12 12', 1),
+			}];
+			if (includeHeading) {
+				destinationEntries.push({
+					blockRef: [2],
+					block: { type: 'heading' },
+					bt: blockText('12', [[0, [0, 100, 1, 101]], [1, [1, 100, 2, 101]]], 1),
+				});
+			}
+			const structureIndex = {
+				withPageEntries(pageIndex, callback) {
+					return callback(pageIndex === 0 ? sourceEntries : destinationEntries);
+				},
+			};
+			const refs = getAnnotLinkRefs({}, new Map([[0, [{
+				src: { pageIndex: 0, rect: [0, 0, 2, 1] },
+				dest: { pageIndex: 1, rect: [3, 0, 3, 1] },
+			}]]]), structureIndex);
+
+			assert.deepEqual(refs.get('0')[0].dest, { blockRef: [1], offsetStart: 3, offsetEnd: 4 });
+		}
+	});
+
 	it('discards conflicting destinations resolved from one disjoint internal link', () => {
 		let sourceText = horizontalBlockText('ABXCD');
 		sourceText.rects[2] = [2, 2, 3, 3];

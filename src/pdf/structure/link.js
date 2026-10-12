@@ -2,7 +2,7 @@ import {
   resolveDestination, getRectCenter, getRangeRects, getClosestDistance
 } from './util.js';
 import { quadPointsToRects } from '../utils.js';
-import { getBlockText, getTextNodesAtRange } from '../../../structured-document-text/src/pdf/index.js';
+import { getTextNodesAtRange } from '../../../structured-document-text/src/pdf/index.js';
 import { createStructureIndex, rectsIntersect } from './structure-index.js';
 
 const MIN_GLYPH_OVERLAP_RATIO = 0.15;
@@ -174,42 +174,30 @@ function getDestinationRange(sourceText, dest, pageEntries, destinationRangeCach
 	for (let entry of pageEntries) {
 		let { blockRef, block, bt } = entry;
 
-		// Search for sourceText in the block text
-		let index = bt.text.indexOf(sourceText);
-		if (index === -1) {
-			continue;
-		}
-
-		// Found a match - calculate distance from dest.rect to the matching text
-		let offsetStart = index;
-		let offsetEnd = index + sourceText.length - 1;
-
 		let isHeading = block?.type === 'heading';
-
-		// Calculate distance - use the rects of the matched text
-		let minDistance = Infinity;
-		for (let i = offsetStart; i <= offsetEnd && i < bt.rects.length; i++) {
-			let charRect = bt.rects[i];
-			let charPageIndex = bt.pageIndexes[i];
-
-			if (charRect && charPageIndex === dest.pageIndex) {
-				let distance = getClosestDistance(dest.rect, charRect);
-				if (distance < minDistance) {
-					minDistance = distance;
+		for (
+			let offsetStart = bt.text.indexOf(sourceText);
+			offsetStart !== -1;
+			offsetStart = bt.text.indexOf(sourceText, offsetStart + 1)
+		) {
+			let offsetEnd = offsetStart + sourceText.length - 1;
+			let minDistance = Infinity;
+			for (let i = offsetStart; i <= offsetEnd && i < bt.rects.length; i++) {
+				let charRect = bt.rects[i];
+				if (charRect && bt.pageIndexes[i] === dest.pageIndex) {
+					minDistance = Math.min(minDistance, getClosestDistance(dest.rect, charRect));
 				}
 			}
-		}
 
-		// Update best match - prefer headings, then closer matches
-		if (isHeading && !bestIsHeading) {
-			// Always prefer heading over non-heading
-			bestMatch = { blockRef: [...blockRef], offsetStart, offsetEnd };
-			bestDistance = minDistance;
-			bestIsHeading = true;
-		} else if (isHeading === bestIsHeading && minDistance < bestDistance) {
-			// Same heading status, prefer closer matches
-			bestMatch = { blockRef: [...blockRef], offsetStart, offsetEnd };
-			bestDistance = minDistance;
+			// The authored destination determines proximity; headings break ties.
+			if (Number.isFinite(minDistance) && (
+				minDistance < bestDistance
+				|| (minDistance === bestDistance && isHeading && !bestIsHeading)
+			)) {
+				bestMatch = { blockRef: [...blockRef], offsetStart, offsetEnd };
+				bestDistance = minDistance;
+				bestIsHeading = isHeading;
+			}
 		}
 	}
 
@@ -409,13 +397,12 @@ export function getParsedLinkRefs(structure, structureIndex = null) {
 
 	const rangesOverlap = (a, b) => a.offsetStart <= b.offsetEnd && b.offsetStart <= a.offsetEnd;
 
-	// Walk through all top-level blocks
-	for (let i = 0; i < structure.content.length; i++) {
-		if (structure.content[i].type === 'preformatted') continue;
-		let blockRef = [i];
-		let bt = structureIndex
-			? structureIndex.withBlockText(blockRef, (bt) => bt)
-			: getBlockText(structure, blockRef);
+	structureIndex ||= createStructureIndex(structure);
+	// Keep parsing and overlap resolution within the owning text block. Flattening
+	// a list joins unrelated items and gives its links different paths from annotations.
+	for (let { block, ref: blockRef } of structureIndex.blockEntries()) {
+		if (block.type === 'preformatted' || block.type === 'list') continue;
+		let bt = structureIndex.withBlockText(blockRef, (bt) => bt);
 
 		if (!bt.text || bt.text.length === 0) {
 			continue;

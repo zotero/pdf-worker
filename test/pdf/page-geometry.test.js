@@ -5,6 +5,40 @@ import {
 	getStructuredPageChars,
 } from '../../pdf.js/src/core/module/module.js';
 import { getLines } from '../../src/pdf/structure/model/block-seg/input.js';
+import { resolveDestination } from '../../src/pdf/structure/util.js';
+
+describe('PDF destination coordinates', () => {
+	it('uses the PDF page box for omitted coordinates regardless of rotation', async () => {
+		for (const view of [[0, 0, 600, 800], [-100, -50, 500, 750]]) {
+			for (const rotate of [0, 90, 180, 270]) {
+				const pdfDocument = {
+					numPages: 1,
+					async getPage() { return { view, rotate }; },
+				};
+				for (const name of ['XYZ', 'Fit', 'FitB', 'FitH', 'FitBH', 'FitV', 'FitBV']) {
+					const result = await resolveDestination(pdfDocument, [0, { name }, null, null, null]);
+					assert.deepEqual(result, {
+						pageIndex: 0,
+						rect: [view[0], view[3], view[0], view[3]],
+					});
+				}
+				assert.deepEqual(await resolveDestination(pdfDocument, [0, { name: 'XYZ' }, 20, 100, null]), {
+					pageIndex: 0,
+					rect: [20, 100, 20, 100],
+				});
+			}
+		}
+	});
+
+	it('rejects a destination beyond the document before fetching its page', async t => {
+		t.mock.method(console, 'error', () => {});
+		const pdfDocument = {
+			numPages: 1,
+			async getPage() { assert.fail('Out-of-range page requested'); },
+		};
+		assert.equal(await resolveDestination(pdfDocument, [1, { name: 'Fit' }]), undefined);
+	});
+});
 
 describe('PDF page geometry filtering', () => {
 	const viewRect = [0, 0, 100, 200];
