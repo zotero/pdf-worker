@@ -19,7 +19,9 @@ function isYearToken(text) {
 function normalizeAuthorToken(text) {
 	let normalized = text
 		.normalize('NFKD')
+		.replace(/[‘’]/gu, "'")
 		.replace(/^[^\p{L}\p{M}]+|[^\p{L}\p{M}]+$/gu, '')
+		.replace(/\p{Pd}/gu, '')
 		.toLowerCase();
 	if (normalized.length < 2) {
 		return null;

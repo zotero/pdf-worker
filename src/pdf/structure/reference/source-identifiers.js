@@ -1,6 +1,6 @@
 const DOI_RE = /\b(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:\s*)?(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/ig;
 const ARXIV_RE = /\barxiv:\s*([a-z-]+\/\d{7}|\d{4}\.\d{4,5})(?:v\d+)?\b/ig;
-const URL_RE = /\bhttps?:\/\/[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,12}\b[-a-zA-Z0-9()@:%_+.~#?&//=]*/g;
+const URL_RE = /\bhttps?:\/\/[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,12}\b[-a-zA-Z0-9()@:%_+.~#?&//=]*/ig;
 const SOURCE_IDENTIFIER_RE = /\b(?:doi:\s*10\.|10\.\d{4,9}\/|arxiv:\s*|https?:\/\/|www\.|pmid:\s*\d+|isbn(?:-1[03])?:|issn:)/i;
 
 function normalizeDOI(value) {
@@ -18,7 +18,10 @@ function normalizeURL(value) {
 	while (/[.,;:)\]}]$/.test(url)) {
 		url = url.slice(0, -1);
 	}
-	return url.toLowerCase();
+	// Scheme and host are case-insensitive; the remaining URL identifies the source.
+	return url.replace(/^(https?:\/\/)([^/?#]*@)?([^/?#]+)/i,
+		(_, scheme, userInfo, host) => scheme.toLowerCase() + (userInfo || '') + host.toLowerCase())
+		.replace(/%[0-9a-f]{2}/ig, escape => escape.toUpperCase());
 }
 
 export function hasSourceIdentifierEvidence(text) {

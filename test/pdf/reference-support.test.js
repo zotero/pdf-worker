@@ -36,6 +36,22 @@ function supportedLists(structure) {
 }
 
 describe('PDF reference run support', () => {
+	it('uses partial numeric matches as support without counting a group more than once', () => {
+		for (const [text, accepted] of [
+			['Prior work [1–4], [2,3], and [5].', true],
+			['Prior work [1,1,2].', false],
+			['Prior work [1], [1], and [2].', true],
+		]) {
+			const structure = { content: [paragraph(text), referenceList([
+				'1. Smith, J. (2020). First source. Journal of Examples, 12(3), 45-50.',
+				'2. Jones, A. (2021). Another title. Example Press.',
+				'4. See the discussion of 2020 in the preceding chapter.',
+				'5. See the discussion of 2021 in the preceding chapter.',
+			])] };
+			assert.equal(supportedLists(structure).length, accepted ? 1 : 0, text);
+		}
+	});
+
 	it('rejects numbered prose lists even when their labels are mentioned', () => {
 		const structure = {
 			content: [

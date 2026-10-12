@@ -1,4 +1,5 @@
 import { createStructureIndex } from './structure-index.js';
+import { citationTextUnits, citationSourceParts } from './citation-text.js';
 import {
 	getAuthorYearValue,
 	getReferenceForBlock,
@@ -7,8 +8,8 @@ import {
 } from './reference/index.js';
 import { extractMatchableSourceIdentifiers } from './reference/source-identifiers.js';
 
-const NUMBER_DELIMITED_RE = /([\[(])\s*([0-9][0-9,\s\-–]*)\s*([\])])/g;
-const WORD_RE = /[\p{L}\p{M}\p{N}]+(?:['’-][\p{L}\p{M}\p{N}]+)*/gu;
+const NUMBER_DELIMITED_RE = /([\[(])([^()[\]]+)([\])])/g;
+const WORD_RE = /[\p{L}\p{M}\p{N}]+(?:['‘’-][\p{L}\p{M}\p{N}]+)*/gu;
 const IDENTITY_GROUP_MAX_CHARS = 180;
 const AUTHOR_YEAR_MENTION_MAX_CHARS = 64;
 const IDENTITY_GROUP_RE = new RegExp(`([\\[(])([^()[\\]\\n]{1,${IDENTITY_GROUP_MAX_CHARS}})([\\])])`, 'g');
@@ -75,24 +76,14 @@ function parseYear(text) {
 
 function numbersFromText(text) {
 	const numbers = [];
-	for (const rawPart of text.split(',')) {
-		const part = rawPart.trim();
-		if (!part) {
-			continue;
-		}
-		const range = part.split(/[-–]/).map(x => parseInt(x.trim(), 10));
-		if (range.length === 1 && Number.isInteger(range[0])) {
-			numbers.push(range[0]);
-		}
-		else if (range.length === 2 && range.every(Number.isInteger)) {
-			const start = Math.min(range[0], range[1]);
-			const end = Math.max(range[0], range[1]);
-			if (end - start <= NUMERIC_RANGE_MAX_SPAN) {
-				for (let value = start; value <= end; value++) {
-					numbers.push(value);
-				}
-			}
-		}
+	for (const part of text.split(',')) {
+		const match = /^\s*([0-9]+)(?:\s*[-–]\s*([0-9]+))?\s*$/u.exec(part);
+		if (!match) return [];
+		const start = Number(match[1]);
+		const end = match[2] ? Number(match[2]) : start;
+		if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+			|| end < start || end - start > NUMERIC_RANGE_MAX_SPAN) return [];
+		for (let value = start; value <= end; value++) numbers.push(value);
 	}
 	return numbers;
 }
@@ -123,7 +114,7 @@ function isNumericChannel(channel) {
 }
 
 function getBlockSourceStrength(block) {
-	return block.type === 'paragraph' || block.type === 'caption' ? 'strong' : 'weak';
+	return ['paragraph', 'caption', 'listitem'].includes(block.type) ? 'strong' : 'weak';
 }
 
 function previousNonSpace(text, index) {
@@ -230,13 +221,14 @@ function hasStructuralNumericMarker(text, start) {
 	return previousWord ? STRUCTURAL_NUMERIC_CONTEXT_WORDS.has(previousWord) : false;
 }
 
-function getNumericMentionContext(bt, start, end, kind, baseStrength) {
+function getNumericMentionContext(bt, start, end, kind, baseStrength, linked = false) {
 	const { text } = bt;
 	if (baseStrength !== 'strong') {
 		return NUMERIC_CONTEXT.WEAK;
 	}
-	if (kind === 'parentheses' && hasStructuralNumericMarker(text, start)) {
-		return NUMERIC_CONTEXT.BLOCKED;
+	if (kind === 'parentheses') {
+		if (hasStructuralNumericMarker(text, start)) return NUMERIC_CONTEXT.BLOCKED;
+		if (!linked && /\p{N}/u.test(text[start - 1] || '')) return NUMERIC_CONTEXT.WEAK;
 	}
 	if (kind !== 'superscript') {
 		return NUMERIC_CONTEXT.CITATION;
@@ -283,44 +275,54 @@ function addWindow(windows, src, kind, text, keys, meta = {}) {
 	return window;
 }
 
-function addDelimitedNumberWindows(windows, bt, blockRef, sourceStrength) {
-	let match;
-	NUMBER_DELIMITED_RE.lastIndex = 0;
-	while ((match = NUMBER_DELIMITED_RE.exec(bt.text)) !== null) {
+function addNumberMembers(windows, text, start, group, kind, numericContext) {
+	for (const member of text.matchAll(/[0-9]+(?:\s*[-–]\s*[0-9]+)?/gu)) {
+		const offsetStart = start + member.index;
+		addWindow(windows, { blockRef: group.blockRef, offsetStart, offsetEnd: offsetStart + member[0].length - 1 },
+			kind, member[0], numbersFromText(member[0]).map(number => ({ type: 'number', value: String(number) })), {
+				numericContext, sourceStrength: sourceStrengthFromNumericContext(numericContext), group,
+			});
+	}
+}
+
+function addDelimitedNumberWindows(windows, bt, blockRef, sourceStrength, referenceIndex, citationLinks = []) {
+	for (const match of bt.text.matchAll(NUMBER_DELIMITED_RE)) {
 		const open = match[1];
-		const close = match[3];
-		if ((open === '[' && close !== ']') || (open === '(' && close !== ')')) {
-			continue;
+		if ((open === '[' && match[3] !== ']') || (open === '(' && match[3] !== ')')) continue;
+		const pureNumeric = numbersFromText(match[2]).length > 0;
+		// Mixed prose is not numeric citation evidence by itself. Expand only a
+		// numeric sequence containing a link to one of its bibliography labels.
+		// Capture complete numeric-looking runs before validating them, so a
+		// decimal, fraction or malformed range cannot become an integer prefix.
+		const runs = pureNumeric ? [{ 0: match[2], index: 0 }]
+			: match[2].matchAll(/(?<![\p{L}\p{M}\p{N}])[0-9.\p{Pd}\p{S}/][0-9\s,.\p{Pd}\p{S}/:%]*/gu);
+		for (const run of runs) {
+			if (/^[\p{L}\p{M}\p{N}]/u.test(match[2].slice(run.index + run[0].length))) continue;
+			const text = run[0].trimEnd();
+			const numbers = numbersFromText(text);
+			const start = match.index + 1 + run.index;
+			const end = start + text.length - 1;
+			if (!numbers.length || bt.attrs[start]?.style?.monospace) continue;
+			const linked = citationLinks.some(link => {
+				const label = getReferenceForBlock(referenceIndex, link.dest?.blockRef)?.label;
+				const linkedText = bt.text.slice(link.src.offsetStart, link.src.offsetEnd + 1)
+					.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+				return label && /^\d+$/u.test(linkedText) && Number(linkedText) === Number(label)
+					&& numbers.includes(Number(label))
+					&& link.src.offsetStart >= start && link.src.offsetEnd <= end + 1;
+			});
+			if (!pureNumeric && !linked) continue;
+			if (open === '(' && numbers.every(number => String(number).length === 4)) continue;
+			const kind = open === '[' ? 'brackets' : 'parentheses';
+			const numericContext = getNumericMentionContext(bt, match.index,
+				match.index + match[0].length - 1, kind, linked ? 'strong' : sourceStrength, linked);
+			if (numericContext === NUMERIC_CONTEXT.BLOCKED) continue;
+			const group = { blockRef,
+				offsetStart: pureNumeric ? match.index : start,
+				offsetEnd: pureNumeric ? match.index + match[0].length - 1 : end,
+			};
+			addNumberMembers(windows, text, start, group, kind, numericContext);
 		}
-		if (bt.attrs[match.index]?.style?.monospace) {
-			continue;
-		}
-		const numbers = numbersFromText(match[2]);
-		if (open === '(' && numbers.length === 1 && String(numbers[0]).length === 4) {
-			continue;
-		}
-		const numericContext = getNumericMentionContext(
-			bt,
-			match.index,
-			match.index + match[0].length - 1,
-			open === '[' ? 'brackets' : 'parentheses',
-			sourceStrength
-		);
-		if (numericContext === NUMERIC_CONTEXT.BLOCKED) {
-			continue;
-		}
-		addWindow(
-			windows,
-			{
-				blockRef,
-				offsetStart: match.index,
-				offsetEnd: match.index + match[0].length - 1,
-			},
-			open === '[' ? 'brackets' : 'parentheses',
-			match[0],
-			numbers.map(number => ({ type: 'number', value: String(number) })),
-			{ numericContext, sourceStrength: sourceStrengthFromNumericContext(numericContext) },
-		);
 	}
 }
 
@@ -337,7 +339,8 @@ function addSuperscriptNumberWindows(windows, bt, blockRef, sourceStrength) {
 			i++;
 		}
 		i--;
-		const numbers = numbersFromText(text);
+		text = text.replace(/,$/u, '');
+		if (!numbersFromText(text).length) continue;
 		const numericContext = getNumericMentionContext(
 			bt,
 			start,
@@ -348,14 +351,8 @@ function addSuperscriptNumberWindows(windows, bt, blockRef, sourceStrength) {
 		if (numericContext === NUMERIC_CONTEXT.BLOCKED) {
 			continue;
 		}
-		addWindow(
-			windows,
-			{ blockRef, offsetStart: start, offsetEnd: i },
-			'superscript',
-			text,
-			numbers.map(number => ({ type: 'number', value: String(number) })),
-			{ numericContext, sourceStrength: sourceStrengthFromNumericContext(numericContext) },
-		);
+		addNumberMembers(windows, text, start, { blockRef, offsetStart: start, offsetEnd: i },
+			'superscript', numericContext);
 	}
 }
 
@@ -583,40 +580,38 @@ function getAuthorYearMention(text, words, yearWord, referenceIndex) {
 }
 
 function addAuthorYearWindows(windows, bt, blockRef, referenceIndex, sourceStrength) {
-	if (!referenceIndex.authorTokens.size) {
-		return;
-	}
+	if (!referenceIndex.authorTokens.size) return;
 	const words = getWords(bt.text);
+	let previous = null;
 	for (const word of words) {
-		const parsedYear = parseYear(word.text);
-		if (!parsedYear || bt.attrs[word.start]?.style?.monospace) {
-			continue;
-		}
-		const mention = getAuthorYearMention(bt.text, words, word, referenceIndex);
-		if (!mention) {
-			continue;
-		}
-		addWindow(
-			windows,
-			{
-				blockRef,
-				offsetStart: mention.offsetStart,
-				offsetEnd: mention.offsetEnd,
-			},
-			'author-year',
-			bt.text.slice(mention.offsetStart, mention.offsetEnd + 1),
-			mention.tokens.map(authorToken => ({
-				type: 'authorYear',
-				value: getAuthorYearValue(authorToken, parsedYear.year, parsedYear.suffix),
-				authorToken,
-			})),
-			{
-				sourceStrength,
-				authorTokenSpans: mention.tokenSpans,
-				terminalAuthorTokens: mention.terminalTokens,
-				sourceWithinExtent: mention.sourceWithinExtent,
-			},
-		);
+		const continues = previous && /^\s*,\s*$/u.test(bt.text.slice(previous.end + 1, word.start));
+		const parsedYear = parseYear(word.text)
+			|| (continues && previous.year.suffix && /^[a-z]$/u.test(word.text)
+				? { year: previous.year.year, suffix: word.text } : null);
+		if (!parsedYear || bt.attrs[word.start]?.style?.monospace) continue;
+		const mention = continues ? previous.mention : getAuthorYearMention(bt.text, words, word, referenceIndex);
+		if (!mention) continue;
+		const group = continues ? previous.group : {
+			blockRef, offsetStart: mention.offsetStart, offsetEnd: word.end,
+		};
+		group.offsetEnd = word.end;
+		addWindow(windows, {
+			blockRef,
+			offsetStart: continues ? word.start : mention.offsetStart,
+			offsetEnd: word.end,
+		}, 'author-year', bt.text.slice(mention.offsetStart, word.end + 1),
+		mention.tokens.map(authorToken => ({
+			type: 'authorYear',
+			value: getAuthorYearValue(authorToken, parsedYear.year, parsedYear.suffix),
+			authorToken,
+		})), {
+			sourceStrength,
+			authorTokenSpans: mention.tokenSpans,
+			terminalAuthorTokens: mention.terminalTokens,
+			sourceWithinExtent: mention.sourceWithinExtent,
+			group,
+		});
+		previous = { end: word.end, year: parsedYear, mention, group };
 	}
 }
 
@@ -750,33 +745,33 @@ export function getMentionWindows(
 	structure,
 	referenceIndex,
 	structureIndex = createStructureIndex(structure),
-	{ includeProseIdentity = true } = {}
+	{ includeProseIdentity = true, citationLinks = null } = {}
 ) {
 	const windows = [];
 
-	for (const entry of structureIndex.blockEntries()) {
-		const blockRef = entry.ref;
-		const block = entry.block;
-		if (
-			block.type === 'preformatted'
-			|| block.type === 'list'
-			|| block.flowClass === 'excluded'
-			|| isReferenceBlock(referenceIndex, blockRef)
-		) {
-			continue;
-		}
-
+	const include = (ref, block) => block.type !== 'preformatted'
+		&& block.type !== 'list'
+		&& structure.content[ref[0]]?.flowClass !== 'excluded'
+		&& !isReferenceBlock(referenceIndex, ref);
+	for (const { blockRef, block, bt, parts, links } of citationTextUnits(structure, structureIndex, include, citationLinks)) {
 		const sourceStrength = getBlockSourceStrength(block);
-		structureIndex.withBlockText(blockRef, (bt) => {
-			addIdentifierWindows(windows, bt, blockRef, sourceStrength);
-			addDelimitedNumberWindows(windows, bt, blockRef, sourceStrength);
-			addSuperscriptNumberWindows(windows, bt, blockRef, sourceStrength);
-			addAuthorYearWindows(windows, bt, blockRef, referenceIndex, sourceStrength);
-			addExplicitIdentityWindows(windows, bt, blockRef, referenceIndex, sourceStrength);
-			if (includeProseIdentity) {
-				addProseIdentityWindows(windows, bt, blockRef, block, referenceIndex, sourceStrength);
+		const start = windows.length;
+		addIdentifierWindows(windows, bt, blockRef, sourceStrength);
+		addDelimitedNumberWindows(windows, bt, blockRef, sourceStrength, referenceIndex, links);
+		addSuperscriptNumberWindows(windows, bt, blockRef, sourceStrength);
+		addAuthorYearWindows(windows, bt, blockRef, referenceIndex, sourceStrength);
+		addExplicitIdentityWindows(windows, bt, blockRef, referenceIndex, sourceStrength);
+		if (includeProseIdentity) {
+			addProseIdentityWindows(windows, bt, blockRef, block, referenceIndex, sourceStrength);
+		}
+		if (parts.length) {
+			for (let i = start; i < windows.length; i++) {
+				windows[i].parts = parts;
+				// Logical offsets serve text context; physical positions serve
+				// bibliography selection and document-wide marker ordering.
+				windows[i].physicalSource = citationSourceParts(windows[i].src, parts)[0];
 			}
-		});
+		}
 	}
 
 	return windows;
@@ -787,52 +782,31 @@ function getEntriesForKey(referenceIndex, key) {
 }
 
 function chooseReference(entries, mention) {
+	const source = mention.physicalSource || mention.src;
 	const compatible = entries.filter(entry =>
 		entry?.src?.blockRef
-		&& !sameBlock(mention.src, entry.src)
+		&& !sameBlock(source, entry.src)
 	);
-	if (!compatible.length) {
+	return chooseCandidate(compatible, mention, entry => entry);
+}
+
+function chooseCandidate(candidates, mention, getReference = candidate => candidate.reference) {
+	if (!candidates.length) {
 		return null;
 	}
 
-	const sourceIndex = mention.src.blockRef[0];
-	const after = compatible.filter(entry => entry.run.ref[0] > sourceIndex);
-	const pool = after.length ? after : compatible;
-	pool.sort((a, b) => {
-		const aDistance = after.length ? a.run.ref[0] - sourceIndex : Math.abs(a.run.ref[0] - sourceIndex);
-		const bDistance = after.length ? b.run.ref[0] - sourceIndex : Math.abs(b.run.ref[0] - sourceIndex);
-		return aDistance - bDistance || a.src.blockRef[0] - b.src.blockRef[0];
-	});
-
-	const run = pool[0].run;
-	const inRun = pool.filter(entry => entry.run === run);
-	return inRun.length === 1 ? inRun[0] : null;
-}
-
-function getNearestCandidateRun(candidates, mention) {
-	if (!candidates.length) {
-		return [];
-	}
-
-	const sourceIndex = mention.src.blockRef[0];
-	const after = candidates.filter(candidate => candidate.reference.run.ref[0] > sourceIndex);
+	const sourceIndex = (mention.physicalSource || mention.src).blockRef[0];
+	const after = candidates.filter(candidate => getReference(candidate).run.ref[0] > sourceIndex);
 	const pool = after.length ? after : candidates;
 	pool.sort((a, b) => {
-		const aDistance = after.length
-			? a.reference.run.ref[0] - sourceIndex
-			: Math.abs(a.reference.run.ref[0] - sourceIndex);
-		const bDistance = after.length
-			? b.reference.run.ref[0] - sourceIndex
-			: Math.abs(b.reference.run.ref[0] - sourceIndex);
-		return aDistance - bDistance || a.reference.src.blockRef[0] - b.reference.src.blockRef[0];
+		const aReference = getReference(a);
+		const bReference = getReference(b);
+		return Math.abs(aReference.run.ref[0] - sourceIndex) - Math.abs(bReference.run.ref[0] - sourceIndex)
+			|| aReference.src.blockRef[0] - bReference.src.blockRef[0];
 	});
 
-	const run = pool[0].reference.run;
-	return pool.filter(candidate => candidate.reference.run === run);
-}
-
-function chooseCandidate(candidates, mention) {
-	const inRun = getNearestCandidateRun(candidates, mention);
+	const run = getReference(pool[0]).run;
+	const inRun = pool.filter(candidate => getReference(candidate).run === run);
 	return inRun.length === 1 ? inRun[0] : null;
 }
 
@@ -874,7 +848,7 @@ function getAuthorCandidates(mention, referenceIndex, authorIdentity = null) {
 		for (const reference of getEntriesForKey(referenceIndex, key)) {
 			if (
 				!reference?.src?.blockRef
-				|| sameBlock(mention.src, reference.src)
+				|| sameBlock(mention.physicalSource || mention.src, reference.src)
 			) {
 				continue;
 			}
@@ -975,7 +949,7 @@ function getIdentityCandidates(
 		for (const reference of referenceIndex.identity.get(token) || []) {
 			if (
 				!reference?.src?.blockRef
-				|| sameBlock(mention.src, reference.src)
+				|| sameBlock(mention.physicalSource || mention.src, reference.src)
 			) {
 				continue;
 			}
@@ -1041,6 +1015,8 @@ function chooseAuthorCandidate(mention, referenceIndex, authorIdentity = null) {
 			);
 			return chooseCandidate(pool, mention);
 		}
+		// Explicitly named authors must identify the same work.
+		return null;
 	}
 	const bestPosition = Math.min(...candidates.map(candidate => candidate.minPosition));
 	return chooseCandidate(candidates.filter(candidate => candidate.minPosition === bestPosition), mention);
@@ -1048,8 +1024,7 @@ function chooseAuthorCandidate(mention, referenceIndex, authorIdentity = null) {
 
 function chooseIdentityCandidate(mention, referenceIndex, authorIdentity = null, options = {}) {
 	const candidates = getIdentityCandidates(mention, referenceIndex, authorIdentity, options);
-	const inRun = getNearestCandidateRun(candidates, mention);
-	return inRun.length === 1 ? inRun[0] : null;
+	return chooseCandidate(candidates, mention);
 }
 
 function learnAuthorIdentity(authorIdentity, candidate) {
@@ -1079,11 +1054,13 @@ function createRunChannelStats(referenceIndex) {
 	return stats;
 }
 
-function addNumericChannelEvidence(channelStats, mention, references) {
+function addNumericChannelEvidence(channelStats, mention, references, countedGroups) {
 	if (mention.sourceStrength !== 'strong' || !isNumericChannel(mention.channel)) {
 		return;
 	}
-	const countedRuns = new Set();
+	const group = mention.group || mention;
+	const countedRuns = countedGroups.get(group) || new Set();
+	countedGroups.set(group, countedRuns);
 	for (const reference of references) {
 		if (!reference?.run || countedRuns.has(reference.run)) {
 			continue;
@@ -1162,13 +1139,13 @@ function getNoteMarkers(mentionWindows) {
 		}
 		for (const key of mention.keys) {
 			if (key.type === 'number') {
-				markers.push({ mention, value: key.value });
+				markers.push({ mention, source: mention.physicalSource || mention.src, value: key.value });
 			}
 		}
 	}
 	markers.sort((a, b) =>
-		a.mention.src.blockRef[0] - b.mention.src.blockRef[0]
-		|| a.mention.src.offsetStart - b.mention.src.offsetStart);
+		a.source.blockRef[0] - b.source.blockRef[0]
+		|| a.source.offsetStart - b.source.offsetStart);
 	return markers;
 }
 
@@ -1262,7 +1239,7 @@ export function createNoteAssignments(mentionWindows, referenceIndex, runNumeric
 export function createCitationResolutionContext(mentionWindows, referenceIndex) {
 	const authorIdentity = new Map();
 	for (const mention of mentionWindows) {
-		if (!mention.keys.some(key => key.type === 'authorYear')) {
+		if (mention.sourceWithinExtent === false || !mention.keys.some(key => key.type === 'authorYear')) {
 			continue;
 		}
 		learnAuthorIdentity(
@@ -1284,11 +1261,13 @@ export function createCitationResolutionContext(mentionWindows, referenceIndex) 
 		);
 	}
 	const channelStats = createRunChannelStats(referenceIndex);
+	const countedGroups = new Map();
 	for (const mention of mentionWindows) {
 		addNumericChannelEvidence(
 			channelStats,
 			mention,
-			resolveMention(mention, referenceIndex, context)
+			resolveMention(mention, referenceIndex, context),
+			countedGroups,
 		);
 	}
 	context.runNumericStyles = selectRunNumericStyles(referenceIndex, channelStats);
@@ -1528,8 +1507,12 @@ function addEmbeddedLinkRefs(refsList, annotLinkRefs, referenceIndex) {
 			let reference = getReferenceForBlock(referenceIndex, link.dest.blockRef);
 			if (!reference) {
 				const number = numberFromText(link.src.text);
-				const entries = number ? referenceIndex.number.get(number) || [] : [];
-				reference = entries.find(entry => entry.run.ref[0] === link.dest.blockRef[0]) || null;
+				const labels = number ? [number, ...numbersFromText(number).map(String)] : [];
+				for (const label of labels) {
+					const entries = referenceIndex.number.get(label) || [];
+					reference = entries.find(entry => entry.run.ref[0] === link.dest.blockRef[0]) || null;
+					if (reference) break;
+				}
 			}
 			if (reference) {
 				let metadata = link.destinationResolution
@@ -1541,6 +1524,34 @@ function addEmbeddedLinkRefs(refsList, annotLinkRefs, referenceIndex) {
 	}
 }
 
+function getResolvedGroups(mentions, resolvedMentions, refsList) {
+	const groups = new Map();
+	for (const mention of mentions) {
+		const key = mention.group || mention;
+		if (!groups.has(key)) groups.set(key, []);
+		groups.get(key).push(mention);
+	}
+	return [...groups.values()].flatMap(members => {
+		if (members[0].group && members.every(member => resolvedMentions.get(member)?.length)) {
+			const references = [...new Set(members.flatMap(member => resolvedMentions.get(member)))];
+			const mention = members[0];
+			const source = {
+				...mention.group,
+				offsetStart: mention.channel === 'author-year'
+					? tightenAuthorYearSource(mention, resolvedMentions.get(mention)).offsetStart : mention.group.offsetStart,
+			};
+			if (!citationSourceParts(source, mention.parts).some(part => hasBlockingSourceOverlap(refsList, part, references))) {
+				return [{ mention, references, source }];
+			}
+		}
+		return members.map(mention => ({
+			mention,
+			references: resolvedMentions.get(mention) || [],
+			source: tightenAuthorYearSource(mention, resolvedMentions.get(mention) || []),
+		}));
+	});
+}
+
 export function getCitationRefs(
 	structure,
 	referenceIndex,
@@ -1549,7 +1560,7 @@ export function getCitationRefs(
 ) {
 	const refsList = new Map();
 	addEmbeddedLinkRefs(refsList, annotLinkRefs, referenceIndex);
-	const mentionWindows = getMentionWindows(structure, referenceIndex, structureIndex);
+	const mentionWindows = getMentionWindows(structure, referenceIndex, structureIndex, { citationLinks: refsList });
 	const context = createCitationResolutionContext(mentionWindows, referenceIndex);
 	const resolvedMentions = new Map();
 	const localRefsByBlock = new Map();
@@ -1557,32 +1568,28 @@ export function getCitationRefs(
 
 	for (const mention of mentionWindows) {
 		const references = resolveAllowedMention(mention, referenceIndex, context);
+		// Partial matches remain bibliography evidence, but an emitted range
+		// must resolve completely. Check each member before combining a group.
+		if (isNumericChannel(mention.channel)
+			&& new Set(mention.keys.map(key => key.value)).size !== references.length) continue;
+		const source = tightenAuthorYearSource(mention, references);
+		if (citationSourceParts(source, mention.parts).some(part => hasBlockingSourceOverlap(refsList, part, references))) continue;
 		resolvedMentions.set(mention, references);
 		addLocalReferenceEvidence(localRefsByBlock, mention, references);
 	}
 
-	for (const mention of mentionWindows) {
-		const references = [];
-		for (const reference of resolvedMentions.get(mention) || []) {
-			if (mention.kind === 'prose-identity') {
-				if (!hasLocalProseEvidence(
-					reference,
-					mention,
-					localRefsByBlock
-				)) {
-					continue;
-				}
-			}
-			references.push(reference);
-		}
+	for (const { mention, references: resolved, source } of getResolvedGroups(mentionWindows, resolvedMentions, refsList)) {
+		const references = mention.kind === 'prose-identity'
+			? resolved.filter(reference => hasLocalProseEvidence(reference, mention, localRefsByBlock))
+			: resolved;
 		if (!references.length) {
 			continue;
 		}
-		const source = tightenAuthorYearSource(mention, references);
-		if (hasBlockingSourceOverlap(refsList, source, references)) {
+		const sources = citationSourceParts(source, mention.parts);
+		if (sources.some(source => hasBlockingSourceOverlap(refsList, source, references))) {
 			continue;
 		}
-		replaceContainedSameDestinationOverlaps(refsList, source, references);
+		for (const source of sources) replaceContainedSameDestinationOverlaps(refsList, source, references);
 		for (const reference of references) {
 			if (mention.kind === 'prose-identity') {
 				const sourceKey = blockKey(mention.src.blockRef);
@@ -1597,7 +1604,7 @@ export function getCitationRefs(
 				}
 				proseRefs.add(destKey);
 			}
-			addRef(refsList, source, reference);
+			for (const source of sources) addRef(refsList, source, reference);
 		}
 	}
 

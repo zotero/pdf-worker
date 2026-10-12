@@ -43,12 +43,14 @@ function createSupport(referenceIndex) {
 	return support;
 }
 
-function countMentionSupport(support, mention, references) {
+function countMentionSupport(support, mention, references, countedGroups) {
 	const hasSpecificKey = mention.keys.some(key => key.type === 'authorYear' || key.type === 'identifier');
 	const hasIdentifierKey = mention.keys.some(key => key.type === 'identifier');
-	const countedRuns = new Set();
+	const group = mention.group || mention;
+	const countedRuns = countedGroups.get(group) || new Set();
+	countedGroups.set(group, countedRuns);
 	for (const reference of references) {
-		if (sameTopLevelBlock(mention.src.blockRef, reference.src.blockRef)) {
+		if (sameTopLevelBlock((mention.physicalSource || mention.src).blockRef, reference.src.blockRef)) {
 			continue;
 		}
 		const item = support.get(reference.run);
@@ -101,11 +103,13 @@ export function getReferenceRunSupport(structure, referenceIndex, structureIndex
 		includeProseIdentity: false,
 	});
 	const context = createCitationResolutionContext(mentionWindows, referenceIndex);
+	const countedGroups = new Map();
 	for (const mention of mentionWindows) {
 		countMentionSupport(
 			support,
 			mention,
-			resolveAllowedMention(mention, referenceIndex, context)
+			resolveAllowedMention(mention, referenceIndex, context),
+			countedGroups,
 		);
 	}
 	for (const item of support.values()) {

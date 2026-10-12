@@ -40,6 +40,241 @@ function getIndex(structure) {
 }
 
 describe('PDF citation references', () => {
+	it('does not turn repeated URLs into citations in a numeric reference run', () => {
+		const url = 'https://example.org/inventory';
+		const structure = { content: [
+			paragraph('Prior work [1] and [2].'),
+			referenceList(['1. Smith, J. 2020. First source. ' + url, '2. Jones, A. 2021. Second source.']),
+			paragraph('The inventory is available at ' + url + '.'),
+		] };
+		const refs = getCitationRefs(structure, getIndex(structure));
+		assert.deepEqual(refs.get('0')?.map(ref => ref.dest.blockRef), [[1, 0], [1, 1]]);
+		assert.equal(refs.has('2'), false);
+	});
+
+	it('resolves zero-padded parent-list links without overriding exact labels', () => {
+		for (const [marker, entries] of [
+			['[04]', ['[04] Smith, J. 2020. Exact label.', '[4] Jones, A. 2021. Other label.']],
+			['[04]', ['[4] Smith, J. 2020. First source.', '[5] Jones, A. 2021. Second source.']],
+			['[04,005]', ['[4] Smith, J. 2020. First source.', '[5] Jones, A. 2021. Second source.']],
+		]) {
+			const text = `Evidence ${marker}.`;
+			const structure = { content: [table(text), referenceList(entries)] };
+			const links = new Map([['0', [...marker.matchAll(/\d+/g)].map(match => {
+				const offsetStart = text.indexOf(marker) + match.index;
+				return {
+					src: { blockRef: [0], offsetStart, offsetEnd: offsetStart + match[0].length - 1, text: match[0] },
+					dest: { blockRef: [1] },
+				};
+			})]]);
+			const refs = getCitationRefs(structure, getIndex(structure), links).get('0');
+			assert.deepEqual(refs?.map(ref => ref.dest.blockRef),
+				marker.includes(',') ? [[1, 0], [1, 1]] : [[1, 0]], marker);
+		}
+	});
+
+	it('expands only the numeric sequence corroborated by a bibliography link in mixed prose', () => {
+		const text = 'Prior work [e.g. 1,2–4; n=5].';
+		const structure = { content: [paragraph(text), referenceList([
+			'1. Smith, J. 2020. First source.', '2. Jones, A. 2021. Second source.',
+			'3. Brown, C. 2022. Third source.', '4. Green, D. 2023. Fourth source.', '5. White, E. 2024. Fifth source.',
+		])] };
+		assert.equal(getCitationRefs(structure, getIndex(structure)).size, 0);
+		const offsetStart = text.indexOf('1');
+		const links = new Map([['0', [{
+			src: { blockRef: [0], offsetStart, offsetEnd: offsetStart, text: '1' }, dest: { blockRef: [1, 0] },
+		}]]]);
+		const refs = getCitationRefs(structure, getIndex(structure), links).get('0');
+		assert.deepEqual(refs.map(ref => ref.dest.blockRef), [[1, 0], [1, 1], [1, 2], [1, 3]]);
+		assert.ok(refs.every(ref => text.slice(ref.src.offsetStart, ref.src.offsetEnd + 1) === '1,2–4'));
+		links.get('0')[0].destinationResolution = 'source-text';
+		links.get('0')[0].dest.blockRef = [1, 1];
+		assert.deepEqual(getCitationRefs(structure, getIndex(structure), links).get('0').map(ref => ref.dest.blockRef), [[1, 1]]);
+	});
+
+	it('links only resolved numeric members, leaving incomplete ranges unlinked', () => {
+		for (const marker of [{ text: '[1,2,3–5]' }, { text: '1,2,3–5', style: { sup: true } }]) {
+			const text = `Prior work ${marker.text}.`;
+			const structure = { content: [styledParagraph([{ text: 'Prior work ' }, marker, { text: '.' }]), referenceList([
+				'1. Smith, J. (2020). First source.', '3. Jones, A. (2021). Second source.', '5. Brown, C. (2022). Third source.',
+			])] };
+			const refs = getCitationRefs(structure, getIndex(structure)).get('0');
+			assert.deepEqual(refs?.map(ref => [text.slice(ref.src.offsetStart, ref.src.offsetEnd + 1), ref.dest.blockRef]),
+				[['1', [1, 0]]], marker.text);
+		}
+	});
+
+	it('does not expand embedded links through invalid numeric tokens in mixed prose', () => {
+		for (const token of ['2.5', '2–3–4', '3–2', '2/3', '2e3', '2x', '2+3', '−2', '2%', '2:3']) {
+			const text = `Prior work [see 1, ${token}].`;
+			const structure = { content: [paragraph(text), referenceList([
+				'1. Smith, J. (2020). First source.', '2. Jones, A. (2021). Second source.',
+				'3. Brown, C. (2022). Third source.', '4. Green, D. (2023). Fourth source.',
+				'5. White, E. (2024). Fifth source.',
+			])] };
+			const offsetStart = text.indexOf('1');
+			const links = new Map([['0', [{
+				src: { blockRef: [0], offsetStart, offsetEnd: offsetStart, text: '1' }, dest: { blockRef: [1, 0] },
+			}]]]);
+			const refs = getCitationRefs(structure, getIndex(structure), links).get('0');
+			assert.deepEqual(refs.map(ref => [text.slice(ref.src.offsetStart, ref.src.offsetEnd + 1), ref.dest.blockRef]),
+				[['1', [1, 0]]], token);
+		}
+	});
+
+	it('does not reinterpret malformed or descending numeric syntax', () => {
+		for (const text of ['[1 2]', '[3–1]', '[1,,2]', '[1–2–3]', '[1,2)']) {
+			const structure = { content: [paragraph(text), referenceList([
+				'1. Smith, J. 2020. First source.', '2. Jones, A. 2021. Second source.', '3. Brown, C. 2022. Third source.',
+			])] };
+			assert.equal(getCitationRefs(structure, getIndex(structure)).size, 0, text);
+		}
+	});
+
+	it('recognizes split citations only across confirmed logical continuations', () => {
+		for (const [first, second, entries] of [
+			['Prior work [1,', '2].', ['1. Smith, J. 2020. First source.', '2. Jones, A. 2021. Second source.']],
+			['Prior work Smith', '(2020, 2021).', ['Smith, J. (2020). First source.', 'Smith, J. (2021). Second source.']],
+			['Prior work Robin-', 'son (2020).', ['Robinson, J. (2020). First source.']],
+		]) {
+			const structure = { content: [paragraph(first), paragraph(second), referenceList(entries)] };
+			assert.equal(getCitationRefs(structure, getIndex(structure)).size, 0);
+			structure.content[0].nextPart = [1];
+			structure.content[1].previousPart = [0];
+			const refs = getCitationRefs(structure, getIndex(structure));
+			for (const [key, text] of [['0', first], ['1', second]]) {
+				assert.deepEqual(refs.get(key).map(ref => ref.dest.blockRef), entries.map((_, i) => [2, i]));
+				assert.ok(refs.get(key).every(ref => ref.src.offsetStart >= 0 && ref.src.offsetEnd < text.length));
+			}
+			structure.content[1].flowClass = 'excluded';
+			assert.equal(getCitationRefs(structure, getIndex(structure)).size, 0);
+		}
+	});
+
+	it('projects linked mixed groups across parts and protects conflicting PDF destinations', () => {
+		const structure = { content: [
+			{ ...paragraph('Prior work [e.g. 1,'), nextPart: [1] },
+			{ ...paragraph('2–3].'), previousPart: [0] },
+			referenceList(['1. Smith, J. 2020. First source.', '2. Jones, A. 2021. Second source.',
+				'3. Brown, C. 2022. Third source.', '4. Green, D. 2023. Fourth source.']),
+		] };
+		const links = new Map([['1', [{
+			src: { blockRef: [1], offsetStart: 0, offsetEnd: 0, text: '2' }, dest: { blockRef: [2, 1] },
+		}]]]);
+		const refs = getCitationRefs(structure, getIndex(structure), links);
+		assert.deepEqual(refs.get('0').map(ref => ref.dest.blockRef), [[2, 0], [2, 1], [2, 2]]);
+		assert.deepEqual(refs.get('1').map(ref => ref.dest.blockRef), [[2, 0], [2, 1], [2, 2]]);
+		links.get('1').push({ src: { blockRef: [1], offsetStart: 2, offsetEnd: 2, text: '3' }, dest: { blockRef: [2, 3] } });
+		const conflicting = getCitationRefs(structure, getIndex(structure), links);
+		assert.deepEqual(conflicting.get('0').map(ref => ref.dest.blockRef), [[2, 0]]);
+		assert.deepEqual(conflicting.get('1').map(ref => ref.dest.blockRef), [[2, 1], [2, 3]]);
+	});
+
+	it('selects local references at the physical position of a continued paragraph citation', () => {
+		for (const citation of ['[1]', 'Smith (2020)']) {
+			const structure = { content: [
+				{ ...paragraph('This paragraph will'), nextPart: [2] },
+				{ ...referenceList(['1. Smith, J. (2020). First local source.']), flowClass: 'auxiliary' },
+				{ ...paragraph(`continue and cite ${citation}.`), previousPart: [0] },
+				{ ...referenceList(['1. Smith, J. (2020). Second local source.']), flowClass: 'auxiliary' },
+			] };
+			const refs = getCitationRefs(structure, getIndex(structure));
+			assert.equal(refs.has('0'), false);
+			assert.deepEqual(refs.get('2')?.map(ref => ref.dest.blockRef), [[3, 0]], citation);
+		}
+	});
+
+	it('preserves authored group destinations while correcting source-text guesses', () => {
+		const text = 'Smith (2020, 2021).';
+		const structure = { content: [paragraph(text), referenceList([
+			'Smith, J. (2020). First source.', 'Smith, J. (2021). Second source.', 'Jones, A. (2021). Third source.',
+		])] };
+		const offsetStart = text.indexOf('2021');
+		const link = { src: { blockRef: [0], offsetStart, offsetEnd: offsetStart + 3, text: '2021' }, dest: { blockRef: [1, 2] } };
+		const links = new Map([['0', [link]]]);
+		// A conflicting destination may also be another member of this group.
+		for (const target of [0, 2]) {
+			link.dest.blockRef = [1, target];
+			const refs = getCitationRefs(structure, getIndex(structure), links).get('0');
+			assert.deepEqual(refs.map(ref => [text.slice(ref.src.offsetStart, ref.src.offsetEnd + 1), ref.dest.blockRef]), [
+				['2021', [1, target]], ['Smith (2020', [1, 0]],
+			]);
+		}
+		link.destinationResolution = 'source-text';
+		assert.deepEqual(getCitationRefs(structure, getIndex(structure), links).get('0').map(ref => ref.dest.blockRef), [[1, 0], [1, 1]]);
+	});
+
+	it('recognizes prose list citations unless their owner is excluded', () => {
+		const structure = { content: [
+			referenceList(['Prior work [1–3].']),
+			referenceList(['1. Smith, J. 2020. First source.', '2. Jones, A. 2021. Second source.', '3. Brown, C. 2022. Third source.']),
+		] };
+		assert.deepEqual(getCitationRefs(structure, getIndex(structure)).get('0,0').map(ref => ref.dest.blockRef), [[1, 0], [1, 1], [1, 2]]);
+		structure.content[0].flowClass = 'excluded';
+		assert.equal(getCitationRefs(structure, getIndex(structure)).size, 0);
+	});
+
+	it('does not swallow an unresolved member or inherit authors across separate groups', () => {
+		const text = 'Smith (2020, 2021, 2022); Jones (2021).';
+		const structure = { content: [paragraph(text), referenceList([
+			'Smith, J. (2020). First source.', 'Smith, J. (2022). Second source.', 'Jones, A. (2021). Third source.',
+		])] };
+		const refs = getCitationRefs(structure, getIndex(structure)).get('0');
+		assert.deepEqual(refs.map(ref => [text.slice(ref.src.offsetStart, ref.src.offsetEnd + 1), ref.dest.blockRef]), [
+			['Smith (2020', [1, 0]], ['2022', [1, 1]], ['Jones (2021', [1, 2]],
+		]);
+	});
+
+	it('does not discard a contradictory explicitly named author', () => {
+		const structure = { content: [paragraph('Smith and Jones (2020).'), referenceList([
+			'Smith, J. (2020). First source.', 'Jones, A. (2021). Second source.',
+		])] };
+		assert.equal(getCitationRefs(structure, getIndex(structure)).size, 0);
+	});
+
+	it('retains ambiguity when author names coincide after hyphen normalization', () => {
+		const ambiguous = { content: [paragraph('SmithJones (2020).'), referenceList([
+			'Smith-Jones, J. (2020). First source.', 'SmithJones, A. (2020). Second source.',
+		])] };
+		assert.equal(getCitationRefs(ambiguous, getIndex(ambiguous)).size, 0);
+	});
+
+	it('preserves case-sensitive URL paths, queries, and fragments when matching sources', () => {
+		for (const suffix of ['Report', 'report?id=AbC', 'report#Section']) {
+			const structure = {
+				content: [
+					paragraph(`See https://example.org/${suffix}.`),
+					referenceList([
+						`Smith, J. 2020. First source. https://example.org/${suffix.toLowerCase()}`,
+						`Jones, A. 2021. Second source. https://example.org/${suffix}`,
+					]),
+				],
+			};
+
+			const refs = getCitationRefs(structure, getIndex(structure));
+
+			assert.deepEqual(refs.get('0').map(ref => ref.dest.blockRef), [[1, 1]]);
+		}
+	});
+
+	it('matches equivalent URL scheme, hostname, and escape casing', () => {
+		for (const [mention, source] of [
+			['HTTPS://EXAMPLE.ORG/Report', 'https://example.org/Report'],
+			['https://example.org/Report%2fData?q=%ab', 'https://example.org/Report%2FData?q=%AB'],
+		]) {
+			const structure = {
+				content: [
+					paragraph(`See ${mention}.`),
+					referenceList([`Smith, J. 2020. Example title. ${source}`]),
+				],
+			};
+
+			const refs = getCitationRefs(structure, getIndex(structure));
+
+			assert.deepEqual(refs.get('0').map(ref => ref.dest.blockRef), [[1, 0]]);
+		}
+	});
+
 	it('links exact numeric mentions to matching reference labels', () => {
 		const structure = {
 			content: [
